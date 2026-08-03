@@ -18,8 +18,11 @@ export const getCounter = async (id) => {
 
 export const addCounter = async (counterData) => {
   try {
-    if (!counterData.name || !counterData.number) {
+    if (!counterData.counterName || !counterData.counterNumber) {
       throw new Error('Counter name and number are required');
+    }
+    if (!counterData.service?.serviceId) {
+      throw new Error('Service is required');
     }
     const newCounter = new Counter(counterData);
     await newCounter.save();

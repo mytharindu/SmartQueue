@@ -25,6 +25,15 @@ departmentRouter
     }
   });
 
+departmentRouter.get("/stats", async (req, res, next) => {
+  try {
+    const stats = await departmentApp.getDepartmentStats();
+    res.json(stats);
+  } catch (error) {
+    next(error);
+  }
+});
+
 departmentRouter
   .route("/:id")
   .get(async (req, res, next) => {
@@ -51,14 +60,5 @@ departmentRouter
       next(error);
     }
   });
-
-departmentRouter.get("/stats", async (req, res, next) => {
-  try {
-    const stats = await departmentApp.getDepartmentStats();
-    res.json(stats);
-  } catch (error) {
-    next(error);
-  }
-});
 
 export default departmentRouter;

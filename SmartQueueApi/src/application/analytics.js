@@ -1,7 +1,8 @@
+import Analytics from "../infrastructure/entities/Analytic.js";
 
 export const getAnalytics = async () => {
     try {
-        return  await analyticsRepo.getAllAnalytics();
+        return await Analytics.find();
     } catch (error) {
         throw new Error("Failed to fetch analytics: " + error.message);
     }
@@ -9,7 +10,7 @@ export const getAnalytics = async () => {
 
 export const getAnalytic = async (id) => {
     try {
-        const analytic = await analyticsRepo.getAnalyticById(id);
+        const analytic = await Analytics.findById(id);
         if (!analytic) {
             throw new Error("Analytic record not found");
         }
@@ -19,9 +20,11 @@ export const getAnalytic = async (id) => {
     }
 };
 
-export const addAnalyticByRange = async (startDate, endDate) => {
+export const getAnalyticsByRange = async (startDate, endDate) => {
     try {
-        return await analyticsRepo.getAnalyticsByDateRange(startDate, endDate);
+        return await Analytics.find({
+            date: { $gte: new Date(startDate), $lte: new Date(endDate) },
+        });
     } catch (error) {
         throw new Error("Failed to fetch analytics by date range: " + error.message);
     }
@@ -29,10 +32,12 @@ export const addAnalyticByRange = async (startDate, endDate) => {
 
 export const recordAnalytic = async (analyticData) => {
     try {
-            if (!analyticData.date) {
-                throw new Error("Date is required to record analytic");
-            }
-        return await analyticsRepo.createAnalytic(analyticData);
+        if (!analyticData.date) {
+            throw new Error("Date is required to record analytic");
+        }
+        const newAnalytic = new Analytics(analyticData);
+        await newAnalytic.save();
+        return newAnalytic;
     } catch (error) {
         throw new Error("Failed to record analytic: " + error.message);
     }
@@ -40,15 +45,15 @@ export const recordAnalytic = async (analyticData) => {
 
 export const updateAnalytic = async (id, updateData) => {
     try {
-        const existingAnalytic = await analyticsRepo.getAnalyticById(id);
+        const existingAnalytic = await Analytics.findById(id);
         if (!existingAnalytic) {
             throw new Error("Analytic record not found");
         }
-        const success = await analyticsRepo.updateAnalytic(id, updateData);
-        if (!success) {
+        const updated = await Analytics.findByIdAndUpdate(id, updateData, { new: true });
+        if (!updated) {
             throw new Error("Failed to update analytic record");
         }
-        return await analyticsRepo.getAnalyticById(id);
+        return updated;
     } catch (error) {
         throw new Error("Failed to update analytic: " + error.message);
     }
@@ -56,12 +61,23 @@ export const updateAnalytic = async (id, updateData) => {
 
 export const getSummary = async () => {
     try {
-        const summary = await analyticsRepo.getAnalyticsSummary();
-        return summary[0] || {
-            totalTokens: 0,
-            completedToday: 0,
-            avgWaitTime: 0,
-        };
+        const summary = await Analytics.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalTokens: { $sum: "$summary.totalTokensIssued" },
+                    completedToday: { $sum: "$summary.totalTokensServed" },
+                    avgWaitTime: { $avg: "$waitTime.average" },
+                },
+            },
+        ]);
+        return (
+            summary[0] || {
+                totalTokens: 0,
+                completedToday: 0,
+                avgWaitTime: 0,
+            }
+        );
     } catch (error) {
         throw new Error("Failed to fetch analytics summary: " + error.message);
     }

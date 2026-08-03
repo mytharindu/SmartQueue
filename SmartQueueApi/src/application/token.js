@@ -1,4 +1,11 @@
 import Token from "../infrastructure/entities/Token.js";
+import Counter from "../infrastructure/entities/Counter.js";
+
+const generateTokenNumber = (serviceName) => {
+    const prefix = (serviceName?.trim().charAt(0) || "T").toUpperCase();
+    const sequence = Math.floor(100 + Math.random() * 900);
+    return `${prefix}-${sequence}`;
+};
 
 export const getTokens = async () => {
     try {
@@ -20,33 +27,57 @@ export const getToken = async (id) => {
     }
 };
 
-export const getTokenByService = async (serviceId) => {
+export const getTokensByStatus = async (status) => {
     try {
-        const token = await Token.findOne({ serviceId });
-        if (!token) {
-            throw new Error("Token not found for the given service");
-        }
-        return token;
+        return await Token.find({ status });
     } catch (error) {
-        throw new Error("Failed to fetch token by service: " + error.message);
+        throw new Error("Failed to fetch tokens by status: " + error.message);
     }
 };
 
 export const reserveToken = async (tokenData) => {
     try {
-        if (!tokenData.visitorName || !tokenData.serviceId) {
-            throw new Error("Visitor name and service ID are required to reserve a token");
+        const { serviceId, serviceName, citizenName, nic, phone, bookedDate, priority } = tokenData;
+        if (!citizenName || !serviceId || !serviceName) {
+            throw new Error("Citizen name, service ID and service name are required to reserve a token");
         }
-        const newToken = {
-            ...tokenData,
-            status: "pending",
-            createdAt: new Date(),
-        };
-        const token = new Token(newToken);
+
+        let tokenNumber;
+        let isDuplicate = true;
+        for (let attempts = 0; attempts < 5 && isDuplicate; attempts += 1) {
+            tokenNumber = generateTokenNumber(serviceName);
+            isDuplicate = await Token.exists({ tokenNumber });
+        }
+        if (isDuplicate) {
+            throw new Error("Could not generate a unique token number, please try again");
+        }
+
+        const token = new Token({
+            tokenNumber,
+            service: { serviceId, serviceName },
+            citizen: { name: citizenName, nic, phone },
+            bookedDate: bookedDate ? new Date(bookedDate) : new Date(),
+            priority: !!priority,
+        });
         await token.save();
         return token;
     } catch (error) {
         throw new Error("Failed to reserve token: " + error.message);
+    }
+};
+
+export const modifyToken = async (id, updateData) => {
+    try {
+        const updated = await Token.findByIdAndUpdate(id, updateData, {
+            new: true,
+            runValidators: true,
+        });
+        if (!updated) {
+            throw new Error("Token not found");
+        }
+        return updated;
+    } catch (error) {
+        throw new Error("Failed to update token: " + error.message);
     }
 };
 
@@ -56,9 +87,13 @@ export const callToken = async (id, counterNumber) => {
         if (!token) {
             throw new Error("Token not found");
         }
+        const counter = await Counter.findOne({ counterNumber });
+        if (!counter) {
+            throw new Error("Counter not found");
+        }
         token.status = "called";
-        token.counterNumber = counterNumber;
-        token.calledAt = new Date();
+        token.counter = { counterId: counter._id, counterName: counter.counterName };
+        token.timing.serviceStartTime = new Date();
         await token.save();
         return token;
     } catch (error) {
@@ -73,7 +108,12 @@ export const completeToken = async (id) => {
             throw new Error("Token not found");
         }
         token.status = "completed";
-        token.completedAt = new Date();
+        token.timing.serviceEndTime = new Date();
+        if (token.timing.serviceStartTime) {
+            token.timing.actualWaitTime = Math.round(
+                (token.timing.serviceStartTime - token.createdAt) / 60000
+            );
+        }
         await token.save();
         return token;
     } catch (error) {
@@ -88,7 +128,6 @@ export const cancelToken = async (id) => {
             throw new Error("Token not found");
         }
         token.status = "cancelled";
-        token.cancelledAt = new Date();
         await token.save();
         return token;
     } catch (error) {
@@ -98,17 +137,21 @@ export const cancelToken = async (id) => {
 
 export const getTokenStats = async () => {
     try {
-        const pendingTokens = await Token.find({ status: "pending" });
-        const calledTokens = await Token.find({ status: "called" });
-        const completedTokens = await Token.find({ status: "completed" });
-        const cancelledTokens = await Token.find({ status: "cancelled" });
+        const [pending, called, serving, completed, cancelled] = await Promise.all([
+            Token.countDocuments({ status: "pending" }),
+            Token.countDocuments({ status: "called" }),
+            Token.countDocuments({ status: "serving" }),
+            Token.countDocuments({ status: "completed" }),
+            Token.countDocuments({ status: "cancelled" }),
+        ]);
 
         return {
-            pending: pendingTokens.length,
-            called: calledTokens.length,
-            completed: completedTokens.length,
-            cancelled: cancelledTokens.length,
-            total: pendingTokens.length + calledTokens.length + completedTokens.length + cancelledTokens.length,
+            pending,
+            called,
+            serving,
+            completed,
+            cancelled,
+            total: pending + called + serving + completed + cancelled,
         };
     } catch (error) {
         throw new Error("Failed to fetch token stats: " + error.message);

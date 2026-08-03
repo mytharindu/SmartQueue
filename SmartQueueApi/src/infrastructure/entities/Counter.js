@@ -105,9 +105,9 @@ const counterSchema = new mongoose.Schema(
 );
 
 // Compound indexes
-countersSchema.index({ 'service.serviceId': 1, status: 1 });
-countersSchema.index({ status: 1, 'dailyMetrics.dateTracked': -1 });
-countersSchema.index({ counterNumber: 1, 'officer.officerId': 1 });
+counterSchema.index({ 'service.serviceId': 1, status: 1 });
+counterSchema.index({ status: 1, 'dailyMetrics.dateTracked': -1 });
+counterSchema.index({ counterNumber: 1, 'officer.officerId': 1 });
 
 const Counter = mongoose.model('Counter', counterSchema);
 export default Counter;

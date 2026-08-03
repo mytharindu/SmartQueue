@@ -12,21 +12,21 @@ analyticsRouter.get("/", async (req, res) => {
     }
 });
 
-analyticsRouter.get("/:id", async (req, res) => {
-    try {
-        const analytic = await analyticApp.getAnalytic(req.params.id);
-        res.json(analytic);
-    } catch (error) {
-        res.status(404).json({ error: error.message });
-    }
-});
-
 analyticsRouter.get("/summary", async (req, res) => {
     try {
         const summary = await analyticApp.getSummary();
         res.json(summary);
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+analyticsRouter.get("/:id", async (req, res) => {
+    try {
+        const analytic = await analyticApp.getAnalytic(req.params.id);
+        res.json(analytic);
+    } catch (error) {
+        res.status(404).json({ error: error.message });
     }
 });
 
