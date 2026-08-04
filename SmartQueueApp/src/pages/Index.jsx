@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   Clock,
@@ -11,7 +12,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { services, counters } from "@/lib/mock-data";
+import { getAllServices, getAllCounters } from "@/lib/api";
 
 
 function Stat({ icon: Icon, value, label, tone }) {
@@ -31,6 +32,15 @@ function Stat({ icon: Icon, value, label, tone }) {
 }
 
 export default function IndexPage() {
+  const { data: services = [] } = useQuery({
+    queryKey: ["services"],
+    queryFn: getAllServices,
+  });
+  const { data: counters = [] } = useQuery({
+    queryKey: ["counters"],
+    queryFn: getAllCounters,
+  });
+
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 md:p-8">
       {/* Hero */}
@@ -101,7 +111,7 @@ export default function IndexPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {services.map((service) => (
-            <Link key={service.id} to="/book" className="group">
+            <Link key={service._id} to="/book" className="group">
               <Card className="h-full bg-gradient-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-glow border-border/50">
                 <div className="flex items-start gap-4">
                   <div className="text-3xl">{service.icon}</div>
@@ -118,7 +128,7 @@ export default function IndexPage() {
                       </span>
                       <span className="flex items-center gap-1">
                         <ShieldCheck className="h-3 w-3" />
-                        {service.docs.length} docs
+                        {service.docs?.length ?? 0} docs
                       </span>
                     </div>
                   </div>
@@ -133,14 +143,18 @@ export default function IndexPage() {
         <h2 className="mb-4 text-2xl font-bold">Counters now serving</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {counters.map((counter) => (
-            <Card key={counter.id} className="bg-card p-5 shadow-card border-border/50">
+            <Card key={counter._id} className="bg-card p-5 shadow-card border-border/50">
               <p className="text-xs text-muted-foreground">
-                {counter.name} · {counter.service}
+                {counter.counterName} · {counter.service?.serviceName}
               </p>
-              <p className="mt-2 font-mono text-3xl font-bold text-primary">{counter.current}</p>
+              <p className="mt-2 font-mono text-3xl font-bold text-primary">
+                {counter.currentToken?.tokenNumber ?? "—"}
+              </p>
               <div className="mt-3 flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{counter.officer}</span>
-                <Badge variant="secondary">{counter.waiting} waiting</Badge>
+                <span className="text-muted-foreground">
+                  {counter.officer?.officerName ?? "Unassigned"}
+                </span>
+                <Badge variant="secondary">{counter.waitingQueue?.count ?? 0} waiting</Badge>
               </div>
             </Card>
           ))}

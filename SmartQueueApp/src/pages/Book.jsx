@@ -1,6 +1,7 @@
 import { useState, useEffect} from "react";
 
 import { toast } from "sonner";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Check, Clock, FileText, Calendar, ShieldAlert } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Label } from "@/components/ui/Label";
@@ -9,7 +10,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Link } from "react-router-dom";
-import { services } from "@/lib/mock-data";
+import { getAllServices, reserveToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const SLOTS = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:30", "14:00", "14:30", "15:00"];
@@ -27,14 +28,41 @@ export default function BookPage() {
     const [slot, setSlot] = useState(null);
     const [priority, setPriority] = useState(false);
     const [token, setToken] = useState(null);
+    const [citizenName, setCitizenName] = useState("A. Perera");
+    const [nic, setNic] = useState("200145600789");
+    const [phone, setPhone] = useState("+94 77 123 4567");
 
-    const service = services.find((s) => s.id === serviceId);
+    const { data: services = [] } = useQuery({
+        queryKey: ["services"],
+        queryFn: getAllServices,
+    });
+
+    const service = services.find((s) => s._id === serviceId);
+
+    const reservation = useMutation({
+        mutationFn: reserveToken,
+        onSuccess: (newToken) => {
+            setToken(newToken.tokenNumber);
+            setStep(4);
+            toast.success("Appointment confirmed", {
+                description: `Your token is ${newToken.tokenNumber}`,
+            });
+        },
+        onError: (error) => {
+            toast.error("Booking failed", { description: error.message });
+        },
+    });
 
     const confirm = () => {
-        const t = `${service.name[0]}-${Math.floor(Math.random() * 900 + 100)}`;
-        setToken(t);
-        setStep(4);
-        toast.success("Appointment confirmed", { description: `Your token is ${t}` });
+        reservation.mutate({
+            serviceId: service._id,
+            serviceName: service.name,
+            citizenName,
+            nic,
+            phone,
+            bookedDate: slot ? `${date}T${slot}:00` : date,
+            priority,
+        });
     };
 
     const reset = () => {
@@ -95,22 +123,22 @@ export default function BookPage() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {services.map((s) => (
                         <Card
-                            key={s.id}
+                            key={s._id}
                             role="button"
                             tabIndex={0}
                             onClick={() => {
-                                setServiceId(s.id);
+                                setServiceId(s._id);
                                 setStep(2);
                             }}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
-                                    setServiceId(s.id);
+                                    setServiceId(s._id);
                                     setStep(2);
                                 }
                             }}
                             className={cn(
                                 "cursor-pointer bg-gradient-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-glow border-border/50",
-                                serviceId === s.id && "border-primary ring-2 ring-primary/30",
+                                serviceId === s._id && "border-primary ring-2 ring-primary/30",
                             )}
                         >
                             <div className="text-3xl">{s.icon}</div>
@@ -179,16 +207,28 @@ export default function BookPage() {
                 <Card className="space-y-5 bg-card p-6 shadow-card">
                     <div>
                         <Label>Full name (as in NIC)</Label>
-                        <Input defaultValue="A. Perera" className="mt-1.5" />
+                        <Input
+                            value={citizenName}
+                            onChange={(e) => setCitizenName(e.target.value)}
+                            className="mt-1.5"
+                        />
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div>
                             <Label>NIC number</Label>
-                            <Input defaultValue="200145600789" className="mt-1.5 font-mono" />
+                            <Input
+                                value={nic}
+                                onChange={(e) => setNic(e.target.value)}
+                                className="mt-1.5 font-mono"
+                            />
                         </div>
                         <div>
                             <Label>Mobile</Label>
-                            <Input defaultValue="+94 77 123 4567" className="mt-1.5" />
+                            <Input
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                className="mt-1.5"
+                            />
                         </div>
                     </div>
                     <div className="rounded-lg border border-border bg-muted/50 p-4">
@@ -197,7 +237,7 @@ export default function BookPage() {
                             Required documents
                         </p>
                         <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                            {service.docs.map((d) => (
+                            {(service.docs ?? []).map((d) => (
                                 <li key={d} className="flex items-center gap-2">
                                     <Check className="h-3.5 w-3.5 text-success" />
                                     {d}
@@ -226,7 +266,9 @@ export default function BookPage() {
                         <Button variant="ghost" onClick={() => setStep(2)}>
                             Back
                         </Button>
-                        <Button onClick={confirm}>Confirm booking</Button>
+                        <Button onClick={confirm} disabled={reservation.isPending}>
+                            {reservation.isPending ? "Booking…" : "Confirm booking"}
+                        </Button>
                     </div>
                 </Card>
             )}
