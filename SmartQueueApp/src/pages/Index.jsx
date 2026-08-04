@@ -111,7 +111,7 @@ export default function IndexPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {services.map((service) => (
-            <Link key={service._id} to="/book" className="group">
+            <Link key={service._id} to={`/book?service=${service._id}`} className="group">
               <Card className="h-full bg-gradient-card p-5 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-glow border-border/50">
                 <div className="flex items-start gap-4">
                   <div className="text-3xl">{service.icon}</div>

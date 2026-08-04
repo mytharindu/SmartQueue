@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getAllServices, reserveToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +19,11 @@ const STEPS = ["Service", "Date & time", "Details", "Confirm"];
 
 
 export default function BookPage() {
-    const [step, setStep] = useState(1)
-    const [serviceId, setServiceId] = useState(null);
+    const [searchParams] = useSearchParams();
+    const preselectedServiceId = searchParams.get("service");
+
+    const [step, setStep] = useState(preselectedServiceId ? 2 : 1)
+    const [serviceId, setServiceId] = useState(preselectedServiceId);
      const [time, setTime] = useState(() => Date.now());
     const [date, setDate] = useState(
         new Date(time + 86400000).toISOString().slice(0, 10),
@@ -38,6 +41,16 @@ export default function BookPage() {
     });
 
     const service = services.find((s) => s._id === serviceId);
+
+    useEffect(() => {
+        if (preselectedServiceId && services.length > 0 && !service) {
+            toast.error("Service not found", {
+                description: "That service is no longer available, please pick another.",
+            });
+            setServiceId(null);
+            setStep(1);
+        }
+    }, [preselectedServiceId, services, service]);
 
     const reservation = useMutation({
         mutationFn: reserveToken,
