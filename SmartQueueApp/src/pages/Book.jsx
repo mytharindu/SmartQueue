@@ -10,12 +10,17 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Link, useSearchParams } from "react-router-dom";
-import { getAllServices, reserveToken } from "@/lib/api";
+import { getAllServices, getServiceSlots, reserveToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-const SLOTS = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:30", "14:00", "14:30", "15:00"];
-const TAKEN = new Set(["10:00", "11:00", "14:00"]);
 const STEPS = ["Service", "Date & time", "Details", "Confirm"];
+
+function toLocalDateOnly(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
 
 
 export default function BookPage() {
@@ -26,7 +31,7 @@ export default function BookPage() {
     const [serviceId, setServiceId] = useState(preselectedServiceId);
      const [time, setTime] = useState(() => Date.now());
     const [date, setDate] = useState(
-        new Date(time + 86400000).toISOString().slice(0, 10),
+        toLocalDateOnly(new Date(time + 86400000)),
     );
     const [slot, setSlot] = useState(null);
     const [priority, setPriority] = useState(false);
@@ -41,6 +46,16 @@ export default function BookPage() {
     });
 
     const service = services.find((s) => s._id === serviceId);
+
+    const { data: slotData, isLoading: slotsLoading } = useQuery({
+        queryKey: ["timeslots", service?._id, date],
+        queryFn: () => getServiceSlots(service._id, date),
+        enabled: !!service,
+    });
+
+    useEffect(() => {
+        setSlot(null);
+    }, [service?._id, date]);
 
     useEffect(() => {
         if (preselectedServiceId && services.length > 0 && !service) {
@@ -179,30 +194,42 @@ export default function BookPage() {
                     />
                     <div className="mt-6">
                         <Label className="text-base">Available time slots</Label>
-                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                            {SLOTS.map((t) => {
-                                const taken = TAKEN.has(t);
-                                const sel = slot === t;
-                                return (
-                                    <button
-                                        key={t}
-                                        type="button"
-                                        disabled={taken}
-                                        onClick={() => setSlot(t)}
-                                        className={cn(
-                                            "rounded-lg border px-3 py-2.5 font-mono text-sm font-semibold transition",
-                                            taken
-                                                ? "cursor-not-allowed bg-muted text-muted-foreground/50 line-through"
-                                                : sel
-                                                    ? "border-primary bg-primary text-primary-foreground shadow-glow"
-                                                    : "bg-card hover:border-primary hover:text-primary",
-                                        )}
-                                    >
-                                        {t}
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        {slotsLoading && (
+                            <p className="mt-3 text-sm text-muted-foreground">Loading slots…</p>
+                        )}
+                        {!slotsLoading && slotData?.isClosed && (
+                            <p className="mt-3 text-sm text-muted-foreground">
+                                No slots available on this date — the office may be closed or no counters are
+                                assigned to this service yet. Try another date.
+                            </p>
+                        )}
+                        {!slotsLoading && slotData && !slotData.isClosed && (
+                            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                                {slotData.slots.map((s) => {
+                                    const full = !s.available;
+                                    const sel = slot === s.time;
+                                    return (
+                                        <button
+                                            key={s.time}
+                                            type="button"
+                                            disabled={full}
+                                            onClick={() => setSlot(s.time)}
+                                            title={full ? "Full" : `${s.capacity - s.booked} of ${s.capacity} left`}
+                                            className={cn(
+                                                "rounded-lg border px-3 py-2.5 font-mono text-sm font-semibold transition",
+                                                full
+                                                    ? "cursor-not-allowed bg-muted text-muted-foreground/50 line-through"
+                                                    : sel
+                                                        ? "border-primary bg-primary text-primary-foreground shadow-glow"
+                                                        : "bg-card hover:border-primary hover:text-primary",
+                                            )}
+                                        >
+                                            {s.time}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                     <div className="mt-8 flex justify-between">
                         <Button variant="ghost" onClick={() => setStep(1)}>

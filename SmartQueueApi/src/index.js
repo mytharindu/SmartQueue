@@ -9,6 +9,7 @@ import analyticsRouter from "./api/analytics.js";
 import departmentRouter from "./api/department.js";
 import counterRouter from "./api/counter.js";
 import tokenRouter from "./api/token.js";
+import timeslotRouter from "./api/timeslot.js";
 
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 console.log("DNS Servers:", dns.getServers());
@@ -28,6 +29,7 @@ app.use("/api/analytics", analyticsRouter);
 app.use("/api/departments", departmentRouter);
 app.use("/api/counters", counterRouter);
 app.use("/api/tokens", tokenRouter);
+app.use("/api/timeslots", timeslotRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

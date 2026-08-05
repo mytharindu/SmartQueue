@@ -54,3 +54,7 @@ export const callToken = (id, counterNumber) =>
   });
 export const completeToken = (id) =>
   request(`/tokens/${id}/complete`, { method: "PUT" });
+
+// Time slots
+export const getServiceSlots = (serviceId, date) =>
+  request(`/timeslots?serviceId=${serviceId}&date=${date}`);

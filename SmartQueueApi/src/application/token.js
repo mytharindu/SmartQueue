@@ -1,5 +1,7 @@
 import Token from "../infrastructure/entities/Token.js";
 import Counter from "../infrastructure/entities/Counter.js";
+import Service from "../infrastructure/entities/Service.js";
+import { getServiceSlots } from "./timeslot.js";
 
 const generateTokenNumber = (serviceName) => {
     const prefix = (serviceName?.trim().charAt(0) || "T").toUpperCase();
@@ -24,6 +26,16 @@ const assignLeastBusyCounter = async (serviceId) => {
     });
     return counters[0] ?? null;
 };
+
+const toLocalDateOnly = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+};
+
+const toLocalClock = (date) =>
+    `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 
 export const getTokens = async () => {
     try {
@@ -70,14 +82,38 @@ export const reserveToken = async (tokenData) => {
             throw new Error("Could not generate a unique token number, please try again");
         }
 
+        const bookedAt = bookedDate ? new Date(bookedDate) : new Date();
+        const slotInfo = await getServiceSlots(serviceId, toLocalDateOnly(bookedAt));
+        if (slotInfo.isClosed) {
+            throw new Error("This service has no counters available on the selected date");
+        }
+        const matchingSlot = slotInfo.slots.find((s) => s.time === toLocalClock(bookedAt));
+        if (!matchingSlot) {
+            throw new Error("Selected time slot is not available");
+        }
+        if (!matchingSlot.available) {
+            throw new Error("Selected time slot is full, please choose another slot");
+        }
+
         const assignedCounter = await assignLeastBusyCounter(serviceId);
+
+        let estimatedWaitTime = 0;
+        if (assignedCounter) {
+            const service = await Service.findById(serviceId);
+            const aheadCount = await Token.countDocuments({
+                "counter.counterId": assignedCounter._id,
+                status: "pending",
+            });
+            estimatedWaitTime = aheadCount * (service?.duration || 30);
+        }
 
         const token = new Token({
             tokenNumber,
             service: { serviceId, serviceName },
             citizen: { name: citizenName, nic, phone },
-            bookedDate: bookedDate ? new Date(bookedDate) : new Date(),
+            bookedDate: bookedAt,
             priority: !!priority,
+            timing: { estimatedWaitTime },
             ...(assignedCounter && {
                 counter: { counterId: assignedCounter._id, counterName: assignedCounter.counterName },
             }),
