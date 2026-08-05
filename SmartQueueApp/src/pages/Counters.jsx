@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Trash2, Edit2, Plus, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -12,77 +13,117 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from '@/components/ui/AlertDialog';
 
-import { counters as initialCounters, services } from '@/lib/mock-data';
+import {
+    getAllCounters,
+    addCounter,
+    updateCounter,
+    deleteCounter,
+    getAllServices,
+} from '@/lib/api';
 
+const emptyFormData = {
+    name: '',
+    serviceId: '',
+    officer: '',
+};
 
 export default function CountersPage() {
-    const [counters, setCounters] = useState(initialCounters);
+    const queryClient = useQueryClient();
+    const { data: counters = [] } = useQuery({
+        queryKey: ['counters'],
+        queryFn: getAllCounters,
+    });
+    const { data: services = [] } = useQuery({
+        queryKey: ['services'],
+        queryFn: getAllServices,
+    });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isDeleteConfirm, setIsDeleteConfirm] = useState(false);
     const [selectedCounter, setSelectedCounter] = useState(null);
-    const [formData, setFormData] = useState({
-        name: '',
-        service: '',
-        officer: '',
+    const [formData, setFormData] = useState(emptyFormData);
+
+    const invalidateCounters = () =>
+        queryClient.invalidateQueries({ queryKey: ['counters'] });
+
+    const createMutation = useMutation({
+        mutationFn: addCounter,
+        onSuccess: (newCounter) => {
+            invalidateCounters();
+            toast.success(`Counter "${newCounter.counterName}" created successfully`);
+            setIsModalOpen(false);
+            setFormData(emptyFormData);
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, payload }) => updateCounter(id, payload),
+        onSuccess: () => {
+            invalidateCounters();
+            toast.success('Counter updated successfully');
+            setIsModalOpen(false);
+            setFormData(emptyFormData);
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: deleteCounter,
+        onSuccess: () => {
+            invalidateCounters();
+            toast.success(`Counter "${selectedCounter.counterName}" deleted successfully`);
+            setIsDeleteConfirm(false);
+            setSelectedCounter(null);
+        },
+        onError: (error) => toast.error(error.message),
     });
 
     const handleOpenCreate = () => {
         setSelectedCounter(null);
-        setFormData({
-            name: '',
-            service: '',
-            officer: '',
-        });
+        setFormData(emptyFormData);
         setIsModalOpen(true);
     }
 
     const handleOpenEdit = (counter) => {
         setSelectedCounter(counter);
         setFormData({
-            name: counter.name,
-            service: counter.service,
-            officer: counter.officer,
+            name: counter.counterName,
+            serviceId: counter.service?.serviceId ?? '',
+            officer: counter.officer?.officerName ?? '',
         });
         setIsModalOpen(true);
     }
+
+    const nextCounterNumber = () => {
+        const maxNum = counters.reduce((max, c) => {
+            const match = /^C-(\d{2,})$/.exec(c.counterNumber ?? '');
+            return match ? Math.max(max, parseInt(match[1], 10)) : max;
+        }, 0);
+        return `C-${String(maxNum + 1).padStart(2, '0')}`;
+    };
 
     const handleSave = () => {
         if (!formData.name.trim()) {
             toast.error("Counter name is required");
             return;
         }
-        if (!formData.service.trim()) {
+        if (!formData.serviceId) {
             toast.error("Service is required");
             return;
         }
-        if (!formData.officer.trim()) {
-            toast.error("Officer name is required");
-            return;
-        }
+
+        const service = services.find((s) => s._id === formData.serviceId);
+        const payload = {
+            counterName: formData.name,
+            service: { serviceId: service._id, serviceName: service.name },
+            ...(formData.officer.trim() && { officer: { officerName: formData.officer.trim() } }),
+        };
 
         if (selectedCounter) {
-            //Update
-            const updated = counters.map(c => c.id === selectedCounter.id ? { ...c, name: formData.name, service: formData.service, officer: formData.officer } : c);
-            setCounters(updated);
+            updateMutation.mutate({ id: selectedCounter._id, payload });
         } else {
-            //Create
-            const newCounter = {
-                id: `C-${String(counters.length + 1).padStart(2, '0')}`, // Generate a new ID
-                name: formData.name,
-                service: formData.service,
-                officer: formData.officer,
-                current: "N/A",
-                waiting: 0,
-            };
-            setCounters([...counters, newCounter]);
-            toast.success(`Counter "${formData.name}" created successfully`);
+            createMutation.mutate({ ...payload, counterNumber: nextCounterNumber() });
         }
-        setIsModalOpen(false);
-        setFormData({
-            name: '',
-            service: '',
-            officer: '',
-        });
     }
 
     const handleDeleteClick = (counter) => {
@@ -91,11 +132,7 @@ export default function CountersPage() {
     }
 
     const handleConfirmDelete = () => {
-        const updated = counters.filter(c => c.id !== selectedCounter.id);
-        setCounters(updated);
-        setIsDeleteConfirm(false);
-        toast.success(`Counter "${selectedCounter.name}" deleted successfully`);
-        setSelectedCounter(null);
+        deleteMutation.mutate(selectedCounter._id);
     }
 
     return (
@@ -132,7 +169,7 @@ export default function CountersPage() {
                         <CardTitle className="text-sm font-medium text-muted-foreground">Active Services</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold">{new Set(counters.map((c) => c.service)).size}</div>
+                        <div className="text-3xl font-bold">{new Set(counters.map((c) => c.service?.serviceId)).size}</div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -140,7 +177,7 @@ export default function CountersPage() {
                         <CardTitle className="text-sm font-medium text-muted-foreground">Total Waiting</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-bold">{counters.reduce((sum, c) => sum + c.waiting, 0)}</div>
+                        <div className="text-3xl font-bold">{counters.reduce((sum, c) => sum + (c.waitingQueue?.count ?? 0), 0)}</div>
                     </CardContent>
                 </Card>
             </div>
@@ -165,17 +202,17 @@ export default function CountersPage() {
                         </TableHeader>
                         <TableBody>
                             {counters.map((counter) => (
-                                <TableRow key={counter.id}>
-                                    <TableCell className="font-mono font-semibold text-primary">{counter.id}</TableCell>
-                                    <TableCell className="font-medium">{counter.name}</TableCell>
+                                <TableRow key={counter._id}>
+                                    <TableCell className="font-mono font-semibold text-primary">{counter.counterNumber}</TableCell>
+                                    <TableCell className="font-medium">{counter.counterName}</TableCell>
                                     <TableCell>
-                                        <Badge variant="outline">{counter.service}</Badge>
+                                        <Badge variant="outline">{counter.service?.serviceName}</Badge>
                                     </TableCell>
-                                    <TableCell>{counter.officer}</TableCell>
-                                    <TableCell className="font-mono text-muted-foreground">{counter.current}</TableCell>
+                                    <TableCell>{counter.officer?.officerName ?? 'Unassigned'}</TableCell>
+                                    <TableCell className="font-mono text-muted-foreground">{counter.currentToken?.tokenNumber ?? '—'}</TableCell>
                                     <TableCell>
-                                        <Badge variant={counter.waiting > 5 ? 'destructive' : 'secondary'}>
-                                            {counter.waiting} in queue
+                                        <Badge variant={(counter.waitingQueue?.count ?? 0) > 5 ? 'destructive' : 'secondary'}>
+                                            {counter.waitingQueue?.count ?? 0} in queue
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
@@ -234,19 +271,19 @@ export default function CountersPage() {
                                 <select
                                     id="service"
                                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={formData.service}
-                                    onChange={(e) => setFormData({ ...formData, service: e.target.value })}
+                                    value={formData.serviceId}
+                                    onChange={(e) => setFormData({ ...formData, serviceId: e.target.value })}
                                 >
                                     <option value="">Select a service</option>
                                     {services.map((svc) => (
-                                        <option key={svc.id} value={svc.name}>
+                                        <option key={svc._id} value={svc._id}>
                                             {svc.name}
                                         </option>
                                     ))}
                                 </select>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="officer">Assigned Officer</Label>
+                                <Label htmlFor="officer">Assigned Officer (optional)</Label>
                                 <Input
                                     id="officer"
                                     placeholder="e.g., John Perera"
@@ -265,6 +302,7 @@ export default function CountersPage() {
                                 <Button
                                     className="flex-1"
                                     onClick={handleSave}
+                                    disabled={createMutation.isPending || updateMutation.isPending}
                                 >
                                     {selectedCounter ? 'Update Counter' : 'Create Counter'}
                                 </Button>
@@ -279,7 +317,7 @@ export default function CountersPage() {
                     <AlertDialogContent>
                         <AlertDialogTitle>Delete Counter?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Are you sure you want to delete <span className="font-semibold">{selectedCounter?.name}</span>? This action cannot be undone.
+                            Are you sure you want to delete <span className="font-semibold">{selectedCounter?.counterName}</span>? This action cannot be undone.
                         </AlertDialogDescription>
                         <div className="flex gap-3">
                             <AlertDialogCancel>Cancel</AlertDialogCancel>

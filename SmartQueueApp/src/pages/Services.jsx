@@ -8,6 +8,7 @@ import {
     Clock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/Button";
@@ -31,7 +32,13 @@ import {
 } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
 
-import { services as mockServices } from "@/lib/mock-data";
+import {
+    getAllServices,
+    addService,
+    updateService,
+    deleteService,
+    getAllDepartments,
+} from "@/lib/api";
 
 const EMOJI_OPTIONS = [
     "📋", "📝", "🏛️", "🏢", "🏛", "👨‍💼", "📊", "💼", "🎓", "📚",
@@ -41,42 +48,80 @@ const EMOJI_OPTIONS = [
     "🎖️", "🏆", "🔔", "📢", "📣", "⚡", "🌟", "💡", "🎯", "🎪",
 ];
 
-export default function ServicesPage() {
+const emptyFormData = {
+    name: "",
+    office: "",
+    departmentId: "",
+    duration: 30,
+    icon: "📋",
+    docs: [],
+};
 
-    const [services, setServices] = useState(mockServices);
+export default function ServicesPage() {
+    const queryClient = useQueryClient();
+    const { data: services = [] } = useQuery({
+        queryKey: ["services"],
+        queryFn: getAllServices,
+    });
+    const { data: departments = [] } = useQuery({
+        queryKey: ["departments"],
+        queryFn: getAllDepartments,
+    });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isIconSelectorOpen, setIsIconSelectorOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({
-        name: "",
-        office: "",
-        duration: 30,
-        icon: "📋",
-        docs: [],
-    });
+    const [formData, setFormData] = useState(emptyFormData);
     const [docInput, setDocInput] = useState("");
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+    const invalidateServices = () =>
+        queryClient.invalidateQueries({ queryKey: ["services"] });
+
+    const createMutation = useMutation({
+        mutationFn: addService,
+        onSuccess: () => {
+            invalidateServices();
+            toast.success("Service added successfully.");
+            closeModal();
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, payload }) => updateService(id, payload),
+        onSuccess: () => {
+            invalidateServices();
+            toast.success("Service updated successfully.");
+            closeModal();
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: deleteService,
+        onSuccess: () => {
+            invalidateServices();
+            toast.success("Service deleted successfully.");
+            setDeleteConfirm(null);
+        },
+        onError: (error) => toast.error(error.message),
+    });
 
     // Model handlers
     const openModal = (service = null) => {
         if (service) {
-            setEditingId(service.id);
+            setEditingId(service._id);
             setFormData({
                 name: service.name,
                 office: service.office,
+                departmentId: service.department?.departmentId ?? "",
                 duration: service.duration,
                 icon: service.icon,
-                docs: [...service.docs],
+                docs: [...(service.docs ?? [])],
             });
         } else {
             setEditingId(null);
-            setFormData({
-                name: "",
-                office: "",
-                duration: 30,
-                icon: "📋",
-                docs: [],
-            });
+            setFormData(emptyFormData);
         }
         setDocInput("");
         setIsModalOpen(true);
@@ -85,13 +130,7 @@ export default function ServicesPage() {
     const closeModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setFormData({
-            name: "",
-            office: "",
-            duration: 30,
-            icon: "📋",
-            docs: [],
-        });
+        setFormData(emptyFormData);
         setDocInput("");
     };
 
@@ -135,32 +174,33 @@ export default function ServicesPage() {
             toast.error("Service name and Office are required.");
             return;
         }
-        // Add or update the service
-        if (editingId) {
-            setServices((prev) =>
-                prev.map((service) =>
-                    service.id === editingId ? { ...service, ...formData } : service
-                )
-            );
-            toast.success("Service updated successfully.");
-        } else {
-            const newService = {
-                id: Date.now(),
-                ...formData,
-            };
-            setServices((prev) => [
-                ...prev,
-                newService,
-            ]);
-            toast.success("Service added successfully.");
+        if (!formData.departmentId) {
+            toast.error("Department is required.");
+            return;
         }
-        closeModal();
+
+        const department = departments.find((d) => d._id === formData.departmentId);
+        const payload = {
+            name: formData.name,
+            office: formData.office,
+            duration: formData.duration,
+            icon: formData.icon,
+            docs: formData.docs,
+            department: {
+                departmentId: department._id,
+                departmentName: department.name,
+            },
+        };
+
+        if (editingId) {
+            updateMutation.mutate({ id: editingId, payload });
+        } else {
+            createMutation.mutate(payload);
+        }
     };
 
     const handleDelete = (id) => {
-        setServices((prev) => prev.filter((service) => service.id !== id));
-        toast.success("Service deleted successfully.");
-        setDeleteConfirm(null);
+        deleteMutation.mutate(id);
     };
 
     return (
@@ -190,6 +230,7 @@ export default function ServicesPage() {
                                 <TableRow>
                                     <TableHead>Service</TableHead>
                                     <TableHead>Office</TableHead>
+                                    <TableHead>Department</TableHead>
                                     <TableHead className="text-right">Duration</TableHead>
                                     <TableHead>Required Documents</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
@@ -197,13 +238,16 @@ export default function ServicesPage() {
                             </TableHeader>
                             <TableBody>
                                 {services.map((service) => (
-                                    <TableRow key={service.id}>
+                                    <TableRow key={service._id}>
                                         <TableCell className="font-medium">
                                             <span className="mr-2">{service.icon}</span>
                                             {service.name}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
                                             {service.office}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground">
+                                            {service.department?.departmentName}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex items-center justify-end gap-1 font-mono text-sm">
@@ -213,7 +257,7 @@ export default function ServicesPage() {
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-wrap gap-1">
-                                                {service.docs.slice(0, 2).map((doc) => (
+                                                {(service.docs ?? []).slice(0, 2).map((doc) => (
                                                     <Badge
                                                         key={doc}
                                                         variant="secondary"
@@ -222,7 +266,7 @@ export default function ServicesPage() {
                                                         {doc}
                                                     </Badge>
                                                 ))}
-                                                {service.docs.length > 2 && (
+                                                {(service.docs?.length ?? 0) > 2 && (
                                                     <Badge variant="outline" className="text-xs">
                                                         +{service.docs.length - 2}
                                                     </Badge>
@@ -242,7 +286,7 @@ export default function ServicesPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    onClick={() => setDeleteConfirm(service.id)}
+                                                    onClick={() => setDeleteConfirm(service._id)}
                                                     className="h-8 w-8 p-0"
                                                 >
                                                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -302,6 +346,25 @@ export default function ServicesPage() {
                                         placeholder="e.g., Department of Immigration"
                                         className="bg-input"
                                     />
+                                </div>
+
+                                {/* Department */}
+                                <div className="space-y-2">
+                                    <Label htmlFor="departmentId">Department *</Label>
+                                    <select
+                                        id="departmentId"
+                                        name="departmentId"
+                                        value={formData.departmentId}
+                                        onChange={handleInputChange}
+                                        className="flex h-9 w-full rounded-md border border-input bg-input px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        <option value="">Select a department</option>
+                                        {departments.map((dept) => (
+                                            <option key={dept._id} value={dept._id}>
+                                                {dept.name}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 {/* Duration & Icon Row */}
@@ -387,6 +450,7 @@ export default function ServicesPage() {
                                     <Button
                                         type="submit"
                                         className="flex-1"
+                                        disabled={createMutation.isPending || updateMutation.isPending}
                                     >
                                         {editingId ? "Update Service" : "Create Service"}
                                     </Button>

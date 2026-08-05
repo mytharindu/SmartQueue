@@ -14,13 +14,31 @@ async function request(path, options = {}) {
 
 // Departments
 export const getAllDepartments = () => request("/departments");
+export const addDepartment = (payload) =>
+  request("/departments", { method: "POST", body: JSON.stringify(payload) });
+export const updateDepartment = (id, payload) =>
+  request(`/departments/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const deleteDepartment = (id) =>
+  request(`/departments/${id}`, { method: "DELETE" });
 
 // Services
 export const getAllServices = () => request("/services");
 export const getService = (id) => request(`/services/${id}`);
+export const addService = (payload) =>
+  request("/services", { method: "POST", body: JSON.stringify(payload) });
+export const updateService = (id, payload) =>
+  request(`/services/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const deleteService = (id) =>
+  request(`/services/${id}`, { method: "DELETE" });
 
 // Counters
 export const getAllCounters = () => request("/counters");
+export const addCounter = (payload) =>
+  request("/counters", { method: "POST", body: JSON.stringify(payload) });
+export const updateCounter = (id, payload) =>
+  request(`/counters/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+export const deleteCounter = (id) =>
+  request(`/counters/${id}`, { method: "DELETE" });
 
 // Tokens
 export const getAllTokens = () => request("/tokens");

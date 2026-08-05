@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { departments as mockDepartments } from "@/lib/mock-departments";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+    getAllDepartments,
+    addDepartment,
+    updateDepartment,
+    deleteDepartment,
+} from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import {
     Plus,
@@ -39,38 +45,66 @@ const EMOJI_OPTIONS = [
     "💰", "💳", "📈", "🔐", "🛡️", "📱", "💻", "⚙️",
 ];
 
+const emptyFormData = {
+    name: "",
+    description: "",
+    location: "",
+    email: "",
+    phone: "",
+    head: "",
+    icon: "🏛️",
+    isActive: true,
+};
+
 export default function DepartmentsPage() {
-    const [departments, setDepartments] = useState(mockDepartments);
+    const queryClient = useQueryClient();
+    const { data: departments = [] } = useQuery({
+        queryKey: ["departments"],
+        queryFn: getAllDepartments,
+    });
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isIconSelectorOpen, setIsIconSelectorOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({
-        id: "",
-        name: "",
-        description: "",
-        location: "",
-        email: "",
-        phone: "",
-        head: "",
-        icon: "🏛️",
-        isActive: true,
-    });
+    const [formData, setFormData] = useState(emptyFormData);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+    const invalidateDepartments = () =>
+        queryClient.invalidateQueries({ queryKey: ["departments"] });
+
+    const createMutation = useMutation({
+        mutationFn: addDepartment,
+        onSuccess: () => {
+            invalidateDepartments();
+            toast.success("Department created successfully");
+            closeModal();
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, payload }) => updateDepartment(id, payload),
+        onSuccess: () => {
+            invalidateDepartments();
+            toast.success("Department updated successfully");
+            closeModal();
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: deleteDepartment,
+        onSuccess: () => {
+            invalidateDepartments();
+            toast.success("Department deleted successfully");
+            setDeleteConfirm(null);
+        },
+        onError: (error) => toast.error(error.message),
+    });
 
     const closeModal = () => {
         setIsModalOpen(false);
         setEditingId(null);
-        setFormData({
-            id: "",
-            name: "",
-            description: "",
-            location: "",
-            email: "",
-            phone: "",
-            head: "",
-            icon: "🏛️",
-            isActive: true,
-        });
+        setFormData(emptyFormData);
         setIsIconSelectorOpen(false);
     };
 
@@ -90,6 +124,14 @@ export default function DepartmentsPage() {
         }));
     };
 
+    const nextDeptId = () => {
+        const maxNum = departments.reduce((max, d) => {
+            const match = /^DEPT-(\d{3})$/.exec(d.deptId ?? "");
+            return match ? Math.max(max, parseInt(match[1], 10)) : max;
+        }, 0);
+        return `DEPT-${String(maxNum + 1).padStart(3, "0")}`;
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
@@ -99,53 +141,19 @@ export default function DepartmentsPage() {
         }
 
         if (editingId) {
-            setDepartments((prev) =>
-                prev.map((dept) =>
-                    dept.id === editingId
-                        ? {
-                            ...dept,
-                            ...formData,
-                            operatingHours: dept.operatingHours,
-                        }
-                        : dept
-                )
-            );
-            toast.success("Department updated successfully");
+            updateMutation.mutate({ id: editingId, payload: formData });
         } else {
-            const newId = `DEPT-${String(departments.length + 1).padStart(3, "0")}`;
-            setDepartments((prev) => [
-                ...prev,
-                {
-                    ...formData,
-                    id: newId,
-                    operatingHours: {
-                        monday: { open: "8:00 AM", close: "5:00 PM" },
-                        tuesday: { open: "8:00 AM", close: "5:00 PM" },
-                        wednesday: { open: "8:00 AM", close: "5:00 PM" },
-                        thursday: { open: "8:00 AM", close: "5:00 PM" },
-                        friday: { open: "8:00 AM", close: "4:00 PM" },
-                        saturday: { open: "Closed", close: "Closed" },
-                        sunday: { open: "Closed", close: "Closed" },
-                    },
-                    totalCounters: 0,
-                    totalServices: 0,
-                },
-            ]);
-            toast.success("Department created successfully");
+            createMutation.mutate({ ...formData, deptId: nextDeptId() });
         }
-        closeModal();
     };
 
     const handleDelete = (id) => {
-        setDepartments((prev) => prev.filter((dept) => dept.id !== id));
-        setDeleteConfirm(null);
-        toast.success("Department deleted successfully");
+        deleteMutation.mutate(id);
     };
 
     const openEditModal = (department) => {
-        setEditingId(department.id);
+        setEditingId(department._id);
         setFormData({
-            id: department.id,
             name: department.name,
             description: department.description,
             location: department.location,
@@ -235,14 +243,14 @@ export default function DepartmentsPage() {
                             </TableHeader>
                             <TableBody>
                                 {departments.map((department) => (
-                                    <TableRow key={department.id}>
+                                    <TableRow key={department._id}>
                                         <TableCell className="font-medium">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xl">{department.icon}</span>
                                                 <div>
                                                     <p>{department.name}</p>
                                                     <p className="text-xs text-muted-foreground">
-                                                        {department.id}
+                                                        {department.deptId}
                                                     </p>
                                                 </div>
                                             </div>
@@ -293,7 +301,7 @@ export default function DepartmentsPage() {
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    onClick={() => setDeleteConfirm(department.id)}
+                                                    onClick={() => setDeleteConfirm(department._id)}
                                                     className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
@@ -444,7 +452,11 @@ export default function DepartmentsPage() {
                                     >
                                         Cancel
                                     </Button>
-                                    <Button type="submit" className="flex-1">
+                                    <Button
+                                        type="submit"
+                                        className="flex-1"
+                                        disabled={createMutation.isPending || updateMutation.isPending}
+                                    >
                                         {editingId ? "Update" : "Create"}
                                     </Button>
                                 </div>
@@ -489,7 +501,7 @@ export default function DepartmentsPage() {
                         </CardContent>
                     </Card>
                 </div>
-            )};
+            )}
             {/* Delete Confirmation */}
             {deleteConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
