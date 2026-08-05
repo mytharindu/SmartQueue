@@ -13,7 +13,6 @@ import CountersPage from "@/pages/Counters";
 import ServicesPage from "@/pages/Services";
 import DepartmentsPage from "@/pages/Departments";
 import TimeSlotsPage from "@/pages/TimeSlots";
-import CounterSettingsPage from "@/pages/CounterSettings";
 //import './App.css'
 
 function NotFound() {
@@ -54,7 +53,6 @@ function App() {
             <Route path="/services" element={<ServicesPage />} />
             <Route path="/departments" element={<DepartmentsPage />} />
             <Route path="/time-slots" element={<TimeSlotsPage />} />
-            <Route path="/counter-settings" element={<CounterSettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

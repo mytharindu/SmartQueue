@@ -12,7 +12,6 @@ import {
   Trello,
   Zap,
   Clock,
-  Sliders,
   Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,7 +33,6 @@ const staffItems = [
 
 const settingsItems = [
   { to: "/time-slots", label: "Time Slots", icon: Clock },
-  { to: "/counter-settings", label: "Counter Settings", icon: Sliders },
 ];
 
 function NavGroup({ label, items, collapsed }) {
