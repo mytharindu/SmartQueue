@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
     Card,
     CardContent,
@@ -30,55 +31,150 @@ import {
     TableRow,
 } from "@/components/ui/Table";
 
-import { officerQueue } from "@/lib/mock-data";
+import { getAllCounters, getAllTokens, callToken, completeToken, cancelToken } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-export default function OfficerPage() {
+function isToday(dateString) {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    const now = new Date();
+    return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+    );
+}
 
-    const [queue, setQueue] = useState(officerQueue);
-    const serving = queue.find((q) => q.status === "serving");
-    const next = queue.filter((q) => q.status !== "serving");
+function minutesBetween(a, b) {
+    return Math.round((new Date(b) - new Date(a)) / 60000);
+}
+
+export default function OfficerPage() {
+    const queryClient = useQueryClient();
+    const [selectedCounterId, setSelectedCounterId] = useState(null);
+
+    const { data: counters = [] } = useQuery({
+        queryKey: ["counters"],
+        queryFn: getAllCounters,
+    });
+    const { data: tokens = [] } = useQuery({
+        queryKey: ["tokens"],
+        queryFn: getAllTokens,
+        refetchInterval: 5000,
+    });
+
+    useEffect(() => {
+        if (!selectedCounterId && counters.length > 0) {
+            setSelectedCounterId(counters[0]._id);
+        }
+    }, [counters, selectedCounterId]);
+
+    const counter = counters.find((c) => c._id === selectedCounterId);
+
+    const invalidate = () => {
+        queryClient.invalidateQueries({ queryKey: ["tokens"] });
+        queryClient.invalidateQueries({ queryKey: ["counters"] });
+    };
+
+    const callMutation = useMutation({
+        mutationFn: ({ tokenId, counterNumber }) => callToken(tokenId, counterNumber),
+        onSuccess: (token) => {
+            invalidate();
+            toast.success(`Now calling ${token.tokenNumber}`);
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const completeMutation = useMutation({
+        mutationFn: completeToken,
+        onSuccess: (token) => {
+            invalidate();
+            toast.success(`${token.tokenNumber} completed`);
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const skipMutation = useMutation({
+        mutationFn: cancelToken,
+        onSuccess: (token) => {
+            invalidate();
+            toast(`${token.tokenNumber} skipped`);
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
+    const serving = tokens.find(
+        (t) => t.counter?.counterId === counter?._id && ["called", "serving"].includes(t.status)
+    );
+
+    const pendingQueue = tokens
+        .filter((t) => t.status === "pending" && t.service?.serviceId === counter?.service?.serviceId)
+        .sort((a, b) => {
+            if (a.priority !== b.priority) return a.priority ? -1 : 1;
+            return new Date(a.bookedDate) - new Date(b.bookedDate);
+        });
+
+    const completedToday = tokens.filter(
+        (t) => t.counter?.counterId === counter?._id && t.status === "completed" && isToday(t.timing?.serviceEndTime)
+    );
+    const avgServeMinutes = (() => {
+        const durations = completedToday
+            .filter((t) => t.timing?.serviceStartTime && t.timing?.serviceEndTime)
+            .map((t) => minutesBetween(t.timing.serviceStartTime, t.timing.serviceEndTime));
+        if (durations.length === 0) return null;
+        return Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    })();
+
+    const stats = [
+        { label: "Today", value: String(completedToday.length), tone: "" },
+        { label: "Waiting", value: String(pendingQueue.length), tone: "text-warning" },
+        { label: "Avg/serve", value: avgServeMinutes !== null ? `${avgServeMinutes}m` : "—", tone: "" },
+    ];
 
     const callNext = () => {
-        if (next.length === 0) return;
-        const [head, ...rest] = next;
-        setQueue([
-            { ...head, status: "serving", waited: 0 },
-            ...rest.map((r, i) => ({
-                ...r,
-                status: i === 0 ? "next" : "waiting",
-            })),
-        ]);
-        toast.success(`Now calling ${head.token}`);
+        if (!counter || pendingQueue.length === 0) return;
+        callMutation.mutate({ tokenId: pendingQueue[0]._id, counterNumber: counter.counterNumber });
     };
 
     const complete = () => {
         if (serving) {
-            toast.success(`${serving.token} completed`);
-            callNext();
+            completeMutation.mutate(serving._id);
         }
     };
 
     const skip = () => {
         if (serving) {
-            toast(`${serving.token} skipped`);
-            setQueue(queue.filter((q) => q.token !== serving.token));
+            skipMutation.mutate(serving._id);
         }
     };
 
-    const stats = [
-        { label: "Today", value: "42", tone: "" },
-        { label: "Waiting", value: String(queue.length - 1), tone: "text-warning" },
-        { label: "Avg/serve", value: "12m", tone: "" },
-    ];
+    if (counters.length === 0) {
+        return (
+            <div className="mx-auto max-w-7xl p-6 md:p-8">
+                <Card className="bg-card p-8 text-center shadow-card">
+                    <p className="text-muted-foreground">
+                        No counters are set up yet. Add one from the Counters page first.
+                    </p>
+                </Card>
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-7xl p-6 md:p-8">
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                        Counter 1 · Passport Application
-                    </p>
+                    <select
+                        value={selectedCounterId ?? ""}
+                        onChange={(e) => setSelectedCounterId(e.target.value)}
+                        className="rounded-md border border-input bg-transparent px-2 py-1 text-xs font-semibold uppercase tracking-widest text-primary"
+                    >
+                        {counters.map((c) => (
+                            <option key={c._id} value={c._id}>
+                                {c.counterName} · {c.service?.serviceName}
+                            </option>
+                        ))}
+                    </select>
                     <h1 className="mt-1 text-3xl font-bold">Officer panel</h1>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -101,7 +197,7 @@ export default function OfficerPage() {
                         <CardDescription className="text-xs uppercase tracking-widest text-primary-foreground/80"> Now serving</CardDescription>
                         {serving && (
                             <CardTitle className="mt-2 font-mono text-7xl font-bold">
-                                {serving.token}
+                                {serving.tokenNumber}
                             </CardTitle>
                         )}
                     </CardHeader>
@@ -111,7 +207,7 @@ export default function OfficerPage() {
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-2">
                                         <User2 className="h-4 w-4" />
-                                        <span className="font-medium">{serving.citizen}</span>
+                                        <span className="font-medium">{serving.citizen?.name}</span>
                                     </div>
                                     {serving.priority && (
                                         <Badge className="border-0 bg-warning text-warning-foreground">
@@ -124,6 +220,7 @@ export default function OfficerPage() {
                                     <Button
                                         onClick={complete}
                                         size="lg"
+                                        disabled={completeMutation.isPending}
                                         className="bg-card font-semibold text-primary hover:bg-card/90"
                                     >
                                         <Check className="mr-1 h-4 w-4" />
@@ -133,6 +230,7 @@ export default function OfficerPage() {
                                         onClick={callNext}
                                         size="lg"
                                         variant="outline"
+                                        disabled={callMutation.isPending || pendingQueue.length === 0}
                                         className="border-white/40 bg-white/10 text-primary-foreground hover:bg-white/20"
                                     >
                                         <ChevronRight className="mr-1 h-4 w-4" />
@@ -151,7 +249,7 @@ export default function OfficerPage() {
                                         </AlertDialogTrigger>
                                         <AlertDialogContent>
                                             <AlertDialogHeader>
-                                                <AlertDialogTitle>Skip token {serving.token}?</AlertDialogTitle>
+                                                <AlertDialogTitle>Skip token {serving.tokenNumber}?</AlertDialogTitle>
                                                 <AlertDialogDescription>
                                                     The citizen will be marked as no-show and the next token will
                                                     be called.
@@ -166,13 +264,24 @@ export default function OfficerPage() {
                                 </div>
                             </>
                         ) : (
-                            <p className="opacity-80">No active token</p>
+                            <>
+                                <p className="opacity-80">No active token</p>
+                                <Button
+                                    onClick={callNext}
+                                    size="lg"
+                                    disabled={callMutation.isPending || pendingQueue.length === 0}
+                                    className="mt-4 bg-card font-semibold text-primary hover:bg-card/90"
+                                >
+                                    <ChevronRight className="mr-1 h-4 w-4" />
+                                    Call next
+                                </Button>
+                            </>
                         )}
                     </CardContent>
                 </Card>
                 <Card className="shadow-card">
                     <CardHeader>
-                        <CardTitle className="text-base">Up next ({next.length})</CardTitle>
+                        <CardTitle className="text-base">Up next ({pendingQueue.length})</CardTitle>
                         <CardDescription>Queued citizens for this counter</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -182,31 +291,31 @@ export default function OfficerPage() {
                                     <TableHead className="w-12">#</TableHead>
                                     <TableHead>Token</TableHead>
                                     <TableHead>Citizen</TableHead>
-                                    <TableHead className="text-right">Waited</TableHead>
+                                    <TableHead className="text-right">Booked</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {next.map((q, i) => (
-                                    <TableRow
-                                        key={q.token}
-                                        className={q.status === "next" ? "bg-primary/5" : ""}
-                                    >
+                                {pendingQueue.map((q, i) => (
+                                    <TableRow key={q._id} className={i === 0 ? "bg-primary/5" : ""}>
                                         <TableCell className="font-semibold text-muted-foreground">
                                             {i + 1}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
-                                                <span className="font-mono font-bold">{q.token}</span>
+                                                <span className="font-mono font-bold">{q.tokenNumber}</span>
                                                 {q.priority && (
                                                     <Star className="h-3.5 w-3.5 fill-warning text-warning" />
                                                 )}
-                                                {q.status === "next" && (
-                                                    <Badge>Next</Badge>
-                                                )}
+                                                {i === 0 && <Badge>Next</Badge>}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground">{q.citizen}</TableCell>
-                                        <TableCell className="text-right font-mono">{q.waited}m</TableCell>
+                                        <TableCell className="text-muted-foreground">{q.citizen?.name}</TableCell>
+                                        <TableCell className="text-right font-mono text-xs">
+                                            {new Date(q.bookedDate).toLocaleTimeString([], {
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })}
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>

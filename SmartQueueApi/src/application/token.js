@@ -7,6 +7,18 @@ const generateTokenNumber = (serviceName) => {
     return `${prefix}-${sequence}`;
 };
 
+const refreshCounterWaitingQueue = async (serviceId) => {
+    if (!serviceId) return;
+    const pendingCount = await Token.countDocuments({
+        "service.serviceId": serviceId,
+        status: "pending",
+    });
+    await Counter.updateMany(
+        { "service.serviceId": serviceId },
+        { $set: { "waitingQueue.count": pendingCount } }
+    );
+};
+
 export const getTokens = async () => {
     try {
         return await Token.find();
@@ -60,6 +72,7 @@ export const reserveToken = async (tokenData) => {
             priority: !!priority,
         });
         await token.save();
+        await refreshCounterWaitingQueue(serviceId);
         return token;
     } catch (error) {
         throw new Error("Failed to reserve token: " + error.message);
@@ -95,6 +108,12 @@ export const callToken = async (id, counterNumber) => {
         token.counter = { counterId: counter._id, counterName: counter.counterName };
         token.timing.serviceStartTime = new Date();
         await token.save();
+
+        counter.currentToken = { tokenId: token._id, tokenNumber: token.tokenNumber };
+        counter.status = "active";
+        await counter.save();
+        await refreshCounterWaitingQueue(token.service.serviceId);
+
         return token;
     } catch (error) {
         throw new Error("Failed to call token: " + error.message);
@@ -115,6 +134,17 @@ export const completeToken = async (id) => {
             );
         }
         await token.save();
+
+        if (token.counter?.counterId) {
+            const counter = await Counter.findById(token.counter.counterId);
+            if (counter) {
+                counter.currentToken = undefined;
+                counter.status = "idle";
+                counter.dailyMetrics.tokensServed = (counter.dailyMetrics.tokensServed || 0) + 1;
+                await counter.save();
+            }
+        }
+
         return token;
     } catch (error) {
         throw new Error("Failed to complete token: " + error.message);
@@ -129,6 +159,17 @@ export const cancelToken = async (id) => {
         }
         token.status = "cancelled";
         await token.save();
+
+        if (token.counter?.counterId) {
+            const counter = await Counter.findById(token.counter.counterId);
+            if (counter) {
+                counter.currentToken = undefined;
+                counter.status = "idle";
+                await counter.save();
+            }
+        }
+        await refreshCounterWaitingQueue(token.service?.serviceId);
+
         return token;
     } catch (error) {
         throw new Error("Failed to cancel token: " + error.message);

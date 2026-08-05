@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { format, subDays, isSameDay } from "date-fns";
 import { Download, TrendingUp, Users, Clock, AlertCircle } from "lucide-react";
 import {
     Card,
@@ -36,9 +38,9 @@ import {
 } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
 
-import { queueHistory, services } from "@/lib/mock-data";
+import { getAllTokens, getAllServices } from "@/lib/api";
 
-function exportCsv() {
+function exportCsv(queueHistory) {
     const rows = [
         ["Day", "Served", "AvgWait(min)"],
         ...queueHistory.map((d) => [d.day, d.served, d.avgWait]),
@@ -60,50 +62,100 @@ const TOOLTIP_STYLE = {
     borderRadius: 8,
 };
 
-const KPIS = [
-    {
-        icon: Users,
-        label: "Citizens served",
-        value: "988",
-        trend: "+12%",
-        tone: "bg-primary/10 text-primary",
-    },
-    {
-        icon: Clock,
-        label: "Avg wait time",
-        value: "22 min",
-        trend: "-18%",
-        tone: "bg-success/15 text-success",
-    },
-    {
-        icon: TrendingUp,
-        label: "Peak load",
-        value: "11:00 AM",
-        trend: "71 tokens",
-        tone: "bg-warning/15 text-warning",
-    },
-    {
-        icon: AlertCircle,
-        label: "Skipped tokens",
-        value: "14",
-        trend: "1.4%",
-        tone: "bg-destructive/10 text-destructive",
-    },
-];
-
-const hourly = [
-    { h: "8a", v: 12 },
-    { h: "9a", v: 38 },
-    { h: "10a", v: 62 },
-    { h: "11a", v: 71 },
-    { h: "12p", v: 45 },
-    { h: "1p", v: 28 },
-    { h: "2p", v: 58 },
-    { h: "3p", v: 49 },
-    { h: "4p", v: 22 },
-];
-
 export default function AdminPage() {
+    const { data: tokens = [] } = useQuery({ queryKey: ["tokens"], queryFn: getAllTokens });
+    const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: getAllServices });
+
+    const now = new Date();
+    const sevenDaysAgo = subDays(now, 7);
+
+    const completedLast7 = tokens.filter(
+        (t) => t.status === "completed" && t.timing?.serviceEndTime && new Date(t.timing.serviceEndTime) >= sevenDaysAgo
+    );
+    const avgWaitLast7 = completedLast7.length
+        ? Math.round(completedLast7.reduce((sum, t) => sum + (t.timing.actualWaitTime || 0), 0) / completedLast7.length)
+        : 0;
+    const cancelledLast7 = tokens.filter(
+        (t) => t.status === "cancelled" && new Date(t.updatedAt) >= sevenDaysAgo
+    );
+    const issuedLast7 = tokens.filter((t) => new Date(t.createdAt) >= sevenDaysAgo);
+    const skippedRate = issuedLast7.length
+        ? ((cancelledLast7.length / issuedLast7.length) * 100).toFixed(1)
+        : "0.0";
+
+    const todayTokens = tokens.filter((t) => isSameDay(new Date(t.createdAt), now));
+    const hourCounts = {};
+    todayTokens.forEach((t) => {
+        const hour = new Date(t.createdAt).getHours();
+        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    });
+    const peakHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0];
+    const formatHour = (h) => {
+        const hour = Number(h);
+        const period = hour >= 12 ? "PM" : "AM";
+        const display = hour % 12 === 0 ? 12 : hour % 12;
+        return `${display}:00 ${period}`;
+    };
+
+    const KPIS = [
+        {
+            icon: Users,
+            label: "Citizens served",
+            value: String(completedLast7.length),
+            trend: "last 7 days",
+            tone: "bg-primary/10 text-primary",
+        },
+        {
+            icon: Clock,
+            label: "Avg wait time",
+            value: `${avgWaitLast7} min`,
+            trend: `${completedLast7.length} completions`,
+            tone: "bg-success/15 text-success",
+        },
+        {
+            icon: TrendingUp,
+            label: "Peak load",
+            value: peakHour ? formatHour(peakHour[0]) : "—",
+            trend: peakHour ? `${peakHour[1]} tokens today` : "no data today",
+            tone: "bg-warning/15 text-warning",
+        },
+        {
+            icon: AlertCircle,
+            label: "Cancelled tokens",
+            value: String(cancelledLast7.length),
+            trend: `${skippedRate}% of issued`,
+            tone: "bg-destructive/10 text-destructive",
+        },
+    ];
+
+    const last7DaysRange = Array.from({ length: 7 }).map((_, i) => subDays(now, 6 - i));
+    const queueHistory = last7DaysRange.map((day) => {
+        const completedThatDay = tokens.filter(
+            (t) => t.status === "completed" && t.timing?.serviceEndTime && isSameDay(new Date(t.timing.serviceEndTime), day)
+        );
+        const avgWait = completedThatDay.length
+            ? Math.round(
+                  completedThatDay.reduce((sum, t) => sum + (t.timing.actualWaitTime || 0), 0) / completedThatDay.length
+              )
+            : 0;
+        return { day: format(day, "EEE"), served: completedThatDay.length, avgWait };
+    });
+
+    const hourly = Array.from({ length: 9 }).map((_, i) => {
+        const hour = 8 + i;
+        return { h: formatHour(hour).replace(":00 ", ""), v: hourCounts[hour] || 0 };
+    });
+
+    const serviceStats = services.map((s) => {
+        const svcTokens = tokens.filter((t) => t.service?.serviceId === s._id);
+        const completed = svcTokens.filter((t) => t.status === "completed");
+        const pending = svcTokens.filter((t) => t.status === "pending").length;
+        const avgWait = completed.length
+            ? Math.round(completed.reduce((sum, t) => sum + (t.timing?.actualWaitTime || 0), 0) / completed.length)
+            : 0;
+        return { ...s, issued: svcTokens.length, avgWait, pending };
+    });
+
     return (
         <div className="mx-auto max-w-7xl space-y-6 p-6 md:p-8">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -113,7 +165,7 @@ export default function AdminPage() {
                         Performance across all services & counters · last 7 days
                     </p>
                 </div>
-                <Button onClick={exportCsv}>
+                <Button onClick={() => exportCsv(queueHistory)}>
                     <Download className="mr-1.5 h-4 w-4" />
                     Export CSV
                 </Button>
@@ -158,7 +210,7 @@ export default function AdminPage() {
                                     <BarChart data={queueHistory}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                         <XAxis dataKey="day" stroke="currentColor" fontSize={12} />
-                                        <YAxis stroke="currentColor" fontSize={12} />
+                                        <YAxis stroke="currentColor" fontSize={12} allowDecimals={false} />
                                         <Tooltip contentStyle={TOOLTIP_STYLE} />
                                         <Bar dataKey="served" fill="var(--primary)" radius={[8, 8, 0, 0]} />
                                     </BarChart>
@@ -169,7 +221,7 @@ export default function AdminPage() {
                     <Card className="shadow-card">
                         <CardHeader>
                             <CardTitle className="text-base">Average waiting time (min)</CardTitle>
-                            <CardDescription>Trending down — efficiency up</CardDescription>
+                            <CardDescription>Based on completed tokens per day</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="h-64">
@@ -177,7 +229,7 @@ export default function AdminPage() {
                                     <LineChart data={queueHistory}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                         <XAxis dataKey="day" stroke="currentColor" fontSize={12} />
-                                        <YAxis stroke="currentColor" fontSize={12} />
+                                        <YAxis stroke="currentColor" fontSize={12} allowDecimals={false} />
                                         <Tooltip contentStyle={TOOLTIP_STYLE} />
                                         <Line
                                             type="monotone"
@@ -205,7 +257,7 @@ export default function AdminPage() {
                                     <BarChart data={hourly}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                         <XAxis dataKey="h" stroke="currentColor" fontSize={12} />
-                                        <YAxis stroke="currentColor" fontSize={12} />
+                                        <YAxis stroke="currentColor" fontSize={12} allowDecimals={false} />
                                         <Tooltip contentStyle={TOOLTIP_STYLE} />
                                         <Bar dataKey="v" fill="var(--accent)" radius={[6, 6, 0, 0]} />
                                     </BarChart>
@@ -234,17 +286,17 @@ export default function AdminPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {services.map((s, i) => {
-                                        const busy = i % 3 === 2;
+                                    {serviceStats.map((s) => {
+                                        const busy = s.pending > 5;
                                         return (
-                                            <TableRow key={s.id}>
+                                            <TableRow key={s._id}>
                                                 <TableCell className="font-medium">
                                                     <span className="mr-2">{s.icon}</span>
                                                     {s.name}
                                                 </TableCell>
                                                 <TableCell className="text-muted-foreground">{s.office}</TableCell>
-                                                <TableCell className="text-right font-mono"> {180 - i * 22}</TableCell>
-                                                <TableCell className="text-right font-mono">{s.duration - 5 + i}m</TableCell>
+                                                <TableCell className="text-right font-mono">{s.issued}</TableCell>
+                                                <TableCell className="text-right font-mono">{s.avgWait}m</TableCell>
                                                 <TableCell>
                                                     <Badge
                                                         className={cn(
