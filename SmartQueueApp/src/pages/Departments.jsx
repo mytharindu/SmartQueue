@@ -54,6 +54,8 @@ const emptyFormData = {
     head: "",
     icon: "🏛️",
     isActive: true,
+    breakStart: "12:00",
+    breakEnd: "13:00",
 };
 
 export default function DepartmentsPage() {
@@ -140,10 +142,18 @@ export default function DepartmentsPage() {
             return;
         }
 
+        if (formData.breakEnd <= formData.breakStart) {
+            toast.error("Break end time must be after break start time");
+            return;
+        }
+
+        const { breakStart, breakEnd, ...rest } = formData;
+        const payload = { ...rest, breakTime: { start: breakStart, end: breakEnd } };
+
         if (editingId) {
-            updateMutation.mutate({ id: editingId, payload: formData });
+            updateMutation.mutate({ id: editingId, payload });
         } else {
-            createMutation.mutate({ ...formData, deptId: nextDeptId() });
+            createMutation.mutate({ ...payload, deptId: nextDeptId() });
         }
     };
 
@@ -162,6 +172,8 @@ export default function DepartmentsPage() {
             head: department.head,
             icon: department.icon,
             isActive: department.isActive,
+            breakStart: department.breakTime?.start ?? "12:00",
+            breakEnd: department.breakTime?.end ?? "13:00",
         });
         setIsModalOpen(true);
     };
@@ -235,6 +247,7 @@ export default function DepartmentsPage() {
                                 <TableRow>
                                     <TableHead>Department</TableHead>
                                     <TableHead>Location</TableHead>
+                                    <TableHead>Break</TableHead>
                                     <TableHead>Head</TableHead>
                                     <TableHead>Contact</TableHead>
                                     <TableHead>Status</TableHead>
@@ -260,6 +273,9 @@ export default function DepartmentsPage() {
                                                 <MapPin className="h-4 w-4 text-muted-foreground" />
                                                 {department.location}
                                             </div>
+                                        </TableCell>
+                                        <TableCell className="text-sm text-muted-foreground">
+                                            {department.breakTime?.start ?? "12:00"}–{department.breakTime?.end ?? "13:00"}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-1">
@@ -413,6 +429,31 @@ export default function DepartmentsPage() {
                                             Select Icon
                                         </Button>
                                     </div>
+                                </div>
+
+                                {/* Break time */}
+                                <div className="space-y-2">
+                                    <Label>Daily break time</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="time"
+                                            name="breakStart"
+                                            value={formData.breakStart}
+                                            onChange={handleInputChange}
+                                            className="bg-input"
+                                        />
+                                        <span className="text-sm text-muted-foreground">to</span>
+                                        <Input
+                                            type="time"
+                                            name="breakEnd"
+                                            value={formData.breakEnd}
+                                            onChange={handleInputChange}
+                                            className="bg-input"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        No appointment slots will be generated during this window.
+                                    </p>
                                 </div>
 
                                 {/* Description */}

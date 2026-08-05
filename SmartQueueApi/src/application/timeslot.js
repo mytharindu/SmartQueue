@@ -5,8 +5,15 @@ import Token from "../infrastructure/entities/Token.js";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
-// Single global break window applied to every service/department for now.
-const BREAK_WINDOW_MINUTES = { start: 12 * 60, end: 13 * 60 }; // 12:00 - 13:00
+// Fallback break window used when a department hasn't set its own.
+const DEFAULT_BREAK_MINUTES = { start: 12 * 60, end: 13 * 60 }; // 12:00 - 13:00
+
+const parse24h = (str) => {
+    if (!str) return null;
+    const match = /^(\d{1,2}):(\d{2})$/.exec(str.trim());
+    if (!match) return null;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+};
 
 const parseClockTime = (str) => {
     if (!str || /closed/i.test(str)) return null;
@@ -64,10 +71,13 @@ export const getServiceSlots = async (serviceId, dateStr) => {
     const effectiveOpen = openMin ?? 9 * 60;
     const effectiveClose = closeMin ?? 17 * 60;
 
+    const breakStart = parse24h(department?.breakTime?.start) ?? DEFAULT_BREAK_MINUTES.start;
+    const breakEnd = parse24h(department?.breakTime?.end) ?? DEFAULT_BREAK_MINUTES.end;
+
     const slotTimes = [];
     if (!departmentClosed && capacityPerSlot > 0) {
         for (let t = effectiveOpen; t + duration <= effectiveClose; t += duration) {
-            const overlapsBreak = t < BREAK_WINDOW_MINUTES.end && t + duration > BREAK_WINDOW_MINUTES.start;
+            const overlapsBreak = breakEnd > breakStart && t < breakEnd && t + duration > breakStart;
             if (!overlapsBreak) {
                 slotTimes.push(t);
             }
@@ -103,7 +113,7 @@ export const getServiceSlots = async (serviceId, dateStr) => {
         slotDurationMinutes: duration,
         countersAvailable: capacityPerSlot,
         isClosed: departmentClosed || capacityPerSlot === 0,
-        breakWindow: { start: minutesToClock(BREAK_WINDOW_MINUTES.start), end: minutesToClock(BREAK_WINDOW_MINUTES.end) },
+        breakWindow: { start: minutesToClock(breakStart), end: minutesToClock(breakEnd) },
         slots,
     };
 };

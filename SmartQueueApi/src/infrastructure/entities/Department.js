@@ -61,6 +61,10 @@ const departmentSchema = new mongoose.Schema(
             saturday: { open: String, close: String },
             sunday: { open: String, close: String },
         },
+        breakTime: {
+            start: { type: String, default: '12:00' },
+            end: { type: String, default: '13:00' },
+        },
         totalCounters: {
             type: Number,
             default: 0,
