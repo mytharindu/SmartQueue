@@ -7,16 +7,22 @@ const generateTokenNumber = (serviceName) => {
     return `${prefix}-${sequence}`;
 };
 
-const refreshCounterWaitingQueue = async (serviceId) => {
-    if (!serviceId) return;
+const refreshCounterQueueCount = async (counterId) => {
+    if (!counterId) return;
     const pendingCount = await Token.countDocuments({
-        "service.serviceId": serviceId,
+        "counter.counterId": counterId,
         status: "pending",
     });
-    await Counter.updateMany(
-        { "service.serviceId": serviceId },
-        { $set: { "waitingQueue.count": pendingCount } }
-    );
+    await Counter.findByIdAndUpdate(counterId, {
+        $set: { "waitingQueue.count": pendingCount },
+    });
+};
+
+const assignLeastBusyCounter = async (serviceId) => {
+    const counters = await Counter.find({ "service.serviceId": serviceId, isActive: true }).sort({
+        "waitingQueue.count": 1,
+    });
+    return counters[0] ?? null;
 };
 
 export const getTokens = async () => {
@@ -64,15 +70,22 @@ export const reserveToken = async (tokenData) => {
             throw new Error("Could not generate a unique token number, please try again");
         }
 
+        const assignedCounter = await assignLeastBusyCounter(serviceId);
+
         const token = new Token({
             tokenNumber,
             service: { serviceId, serviceName },
             citizen: { name: citizenName, nic, phone },
             bookedDate: bookedDate ? new Date(bookedDate) : new Date(),
             priority: !!priority,
+            ...(assignedCounter && {
+                counter: { counterId: assignedCounter._id, counterName: assignedCounter.counterName },
+            }),
         });
         await token.save();
-        await refreshCounterWaitingQueue(serviceId);
+        if (assignedCounter) {
+            await refreshCounterQueueCount(assignedCounter._id);
+        }
         return token;
     } catch (error) {
         throw new Error("Failed to reserve token: " + error.message);
@@ -112,7 +125,7 @@ export const callToken = async (id, counterNumber) => {
         counter.currentToken = { tokenId: token._id, tokenNumber: token.tokenNumber };
         counter.status = "active";
         await counter.save();
-        await refreshCounterWaitingQueue(token.service.serviceId);
+        await refreshCounterQueueCount(counter._id);
 
         return token;
     } catch (error) {
@@ -138,8 +151,10 @@ export const completeToken = async (id) => {
         if (token.counter?.counterId) {
             const counter = await Counter.findById(token.counter.counterId);
             if (counter) {
-                counter.currentToken = undefined;
-                counter.status = "idle";
+                if (String(counter.currentToken?.tokenId) === String(token._id)) {
+                    counter.currentToken = undefined;
+                    counter.status = "idle";
+                }
                 counter.dailyMetrics.tokensServed = (counter.dailyMetrics.tokensServed || 0) + 1;
                 await counter.save();
             }
@@ -163,12 +178,14 @@ export const cancelToken = async (id) => {
         if (token.counter?.counterId) {
             const counter = await Counter.findById(token.counter.counterId);
             if (counter) {
-                counter.currentToken = undefined;
-                counter.status = "idle";
+                if (String(counter.currentToken?.tokenId) === String(token._id)) {
+                    counter.currentToken = undefined;
+                    counter.status = "idle";
+                }
                 await counter.save();
             }
+            await refreshCounterQueueCount(token.counter.counterId);
         }
-        await refreshCounterWaitingQueue(token.service?.serviceId);
 
         return token;
     } catch (error) {

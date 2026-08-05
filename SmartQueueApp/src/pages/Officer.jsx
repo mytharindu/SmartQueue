@@ -108,7 +108,12 @@ export default function OfficerPage() {
     );
 
     const pendingQueue = tokens
-        .filter((t) => t.status === "pending" && t.service?.serviceId === counter?.service?.serviceId)
+        .filter(
+            (t) =>
+                t.status === "pending" &&
+                t.counter?.counterId === counter?._id &&
+                isToday(t.bookedDate)
+        )
         .sort((a, b) => {
             if (a.priority !== b.priority) return a.priority ? -1 : 1;
             return new Date(a.bookedDate) - new Date(b.bookedDate);
