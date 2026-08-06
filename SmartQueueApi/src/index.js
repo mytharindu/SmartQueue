@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import dns from "dns";
 import connectDB from "./infrastructure/db.js";
 import serviceRouter from "./api/service.js";
 import officerRouter from "./api/officer.js";
@@ -10,9 +9,7 @@ import departmentRouter from "./api/department.js";
 import counterRouter from "./api/counter.js";
 import tokenRouter from "./api/token.js";
 import timeslotRouter from "./api/timeslot.js";
-
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
-console.log("DNS Servers:", dns.getServers());
+import authRouter from "./api/auth.js";
 
 const app = express();
 
@@ -30,6 +27,7 @@ app.use("/api/departments", departmentRouter);
 app.use("/api/counters", counterRouter);
 app.use("/api/tokens", tokenRouter);
 app.use("/api/timeslots", timeslotRouter);
+app.use("/api/auth", authRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });

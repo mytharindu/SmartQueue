@@ -13,8 +13,10 @@ import {
   Zap,
   Clock,
   Building2,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/AuthContext";
 
 const citizenItems = [
   { to: "/", label: "Overview", icon: Home, end: true },
@@ -29,10 +31,6 @@ const staffItems = [
   { to: "/departments", label: "Departments", icon: Building2 },
   { to: "/services", label: "Services", icon: Zap },
   { to: "/counters", label: "Counters", icon: Trello },
-];
-
-const settingsItems = [
-  { to: "/time-slots", label: "Time Slots", icon: Clock },
 ];
 
 function NavGroup({ label, items, collapsed }) {
@@ -71,6 +69,15 @@ function NavGroup({ label, items, collapsed }) {
 }
 
 export function Sidebar({ collapsed, onToggle }) {
+  const { user } = useAuth();
+
+  const settingsItems = [
+    { to: "/time-slots", label: "Time Slots", icon: Clock },
+    ...(user?.role === "admin"
+      ? [{ to: "/staff", label: "Staff Accounts", icon: Users }]
+      : []),
+  ];
+
   return (
     <aside
       className={cn(
@@ -106,8 +113,8 @@ export function Sidebar({ collapsed, onToggle }) {
 
       <nav className="flex-1 overflow-y-auto py-2">
         <NavGroup label="Citizen" items={citizenItems} collapsed={collapsed} />
-        <NavGroup label="Staff" items={staffItems} collapsed={collapsed} />
-        <NavGroup label="Configuration" items={settingsItems} collapsed={collapsed} />
+        {user && <NavGroup label="Staff" items={staffItems} collapsed={collapsed} />}
+        {user && <NavGroup label="Configuration" items={settingsItems} collapsed={collapsed} />}
       </nav>
 
       <div className="border-t border-sidebar-border p-3">

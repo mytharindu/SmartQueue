@@ -3,6 +3,7 @@ import { Routes, Route, Link } from "react-router-dom";
 import { Toaster } from "sonner";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { RequireAuth } from "@/components/RequireAuth";
 import IndexPage from "@/pages/Index";
 import BookPage from "@/pages/Book";
 import MyTokensPage from "@/pages/MyTokens";
@@ -13,6 +14,9 @@ import CountersPage from "@/pages/Counters";
 import ServicesPage from "@/pages/Services";
 import DepartmentsPage from "@/pages/Departments";
 import TimeSlotsPage from "@/pages/TimeSlots";
+import StaffPage from "@/pages/Staff";
+import LoginPage from "@/pages/Login";
+import RegisterPage from "@/pages/Register";
 //import './App.css'
 
 function NotFound() {
@@ -47,12 +51,15 @@ function App() {
             <Route path="/book" element={<BookPage />} />
             <Route path="/my-tokens" element={<MyTokensPage />} />
             <Route path="/live" element={<LivePage />} />
-            <Route path="/officer" element={<OfficerPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/counters" element={<CountersPage />} />
-            <Route path="/services" element={<ServicesPage />} />
-            <Route path="/departments" element={<DepartmentsPage />} />
-            <Route path="/time-slots" element={<TimeSlotsPage />} />
+            <Route path="/officer" element={<RequireAuth><OfficerPage /></RequireAuth>} />
+            <Route path="/admin" element={<RequireAuth><AdminPage /></RequireAuth>} />
+            <Route path="/counters" element={<RequireAuth><CountersPage /></RequireAuth>} />
+            <Route path="/services" element={<RequireAuth><ServicesPage /></RequireAuth>} />
+            <Route path="/departments" element={<RequireAuth><DepartmentsPage /></RequireAuth>} />
+            <Route path="/time-slots" element={<RequireAuth><TimeSlotsPage /></RequireAuth>} />
+            <Route path="/staff" element={<RequireAuth adminOnly><StaffPage /></RequireAuth>} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

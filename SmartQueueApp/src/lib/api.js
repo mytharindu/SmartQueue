@@ -1,8 +1,12 @@
 const API_BASE = "http://localhost:8000/api";
 
 async function request(path, options = {}) {
+  const token = localStorage.getItem("authToken");
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
     ...options,
   });
   const data = await response.json().catch(() => null);
@@ -11,6 +15,17 @@ async function request(path, options = {}) {
   }
   return data;
 }
+
+// Auth
+export const registerAccount = (username, password) =>
+  request("/auth/register", { method: "POST", body: JSON.stringify({ username, password }) });
+export const loginAccount = (username, password) =>
+  request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
+export const logoutAccount = () => request("/auth/logout", { method: "POST" });
+export const getCurrentUser = () => request("/auth/me");
+export const getAllUsers = () => request("/auth/users");
+export const updateUserRole = (id, role) =>
+  request(`/auth/users/${id}/role`, { method: "PUT", body: JSON.stringify({ role }) });
 
 // Departments
 export const getAllDepartments = () => request("/departments");
