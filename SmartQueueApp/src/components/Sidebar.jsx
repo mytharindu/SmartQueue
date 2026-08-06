@@ -25,12 +25,14 @@ const citizenItems = [
   { to: "/live", label: "Live Queue", icon: MonitorPlay },
 ];
 
-const staffItems = [
-  { to: "/officer", label: "Officer Panel", icon: UserCog },
-  { to: "/admin", label: "Admin Analytics", icon: BarChart3 },
-  { to: "/departments", label: "Departments", icon: Building2 },
-  { to: "/services", label: "Services", icon: Zap },
-  { to: "/counters", label: "Counters", icon: Trello },
+const MANAGE_ROLES = ["supervisor", "manager", "admin"];
+
+const ALL_STAFF_ITEMS = [
+  { to: "/officer", label: "Officer Panel", icon: UserCog, roles: null },
+  { to: "/admin", label: "Admin Analytics", icon: BarChart3, roles: MANAGE_ROLES },
+  { to: "/departments", label: "Departments", icon: Building2, roles: MANAGE_ROLES },
+  { to: "/services", label: "Services", icon: Zap, roles: MANAGE_ROLES },
+  { to: "/counters", label: "Counters", icon: Trello, roles: null },
 ];
 
 function NavGroup({ label, items, collapsed }) {
@@ -70,6 +72,10 @@ function NavGroup({ label, items, collapsed }) {
 
 export function Sidebar({ collapsed, onToggle }) {
   const { user } = useAuth();
+
+  const staffItems = ALL_STAFF_ITEMS.filter(
+    (item) => !item.roles || item.roles.includes(user?.role),
+  );
 
   const settingsItems = [
     { to: "/time-slots", label: "Time Slots", icon: Clock },

@@ -1,7 +1,9 @@
 import express from "express";
 import * as serviceApp from "../application/service.js";
 import Service from "../infrastructure/entities/Service.js";
+import { requireRole } from "../middleware/auth.js";
 
+const MANAGE_ROLES = ["supervisor", "manager", "admin"];
 const serviceRouter = express.Router();
 
 serviceRouter.use(express.json());
@@ -16,7 +18,7 @@ serviceRouter
             res.status(500).json({ error: error.message });
         }
     })
-    .post(async (req, res) => {
+    .post(requireRole(...MANAGE_ROLES), async (req, res) => {
         try {
             const newService = await serviceApp.addService(req.body);
             res.status(201).json(newService);
@@ -38,7 +40,7 @@ serviceRouter
             res.status(404).json({ error: error.message });
         }
     })
-    .put(async (req, res) => {
+    .put(requireRole(...MANAGE_ROLES), async (req, res) => {
         try {
             const updatedService = await serviceApp.modifyService(req.params.id, req.body);
             res.json(updatedService);
@@ -46,7 +48,7 @@ serviceRouter
             res.status(400).json({ error: error.message });
         }
     })
-    .delete(async (req, res) => {
+    .delete(requireRole(...MANAGE_ROLES), async (req, res) => {
         try {
             const deletedService = await serviceApp.removeService(req.params.id);
             res.json(deletedService);

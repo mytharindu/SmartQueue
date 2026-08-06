@@ -1,7 +1,9 @@
 import express from "express";
 import * as departmentApp from "../application/department.js";
 import Department from "../infrastructure/entities/Department.js";
+import { requireRole } from "../middleware/auth.js";
 
+const MANAGE_ROLES = ["supervisor", "manager", "admin"];
 const departmentRouter = express.Router();
 
 departmentRouter.use(express.json());
@@ -16,7 +18,7 @@ departmentRouter
       next(error);
     }
   })
-  .post(async (req, res, next) => {
+  .post(requireRole(...MANAGE_ROLES), async (req, res, next) => {
     try {
       const newDepartment = await departmentApp.addDepartment(req.body);
       res.status(201).json(newDepartment);
@@ -44,7 +46,7 @@ departmentRouter
       next(error);
     }
   })
-  .put(async (req, res, next) => {
+  .put(requireRole(...MANAGE_ROLES), async (req, res, next) => {
     try {
       const updated = await departmentApp.modifyDepartment(req.params.id, req.body);
       res.json(updated);
@@ -52,7 +54,7 @@ departmentRouter
       next(error);
     }
   })
-  .delete(async (req, res, next) => {
+  .delete(requireRole(...MANAGE_ROLES), async (req, res, next) => {
     try {
       await departmentApp.removeDepartment(req.params.id);
       res.status(204).send();

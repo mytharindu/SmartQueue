@@ -1,19 +1,12 @@
 import express from "express";
 import * as authApp from "../application/auth.js";
+import { requireRole } from "../middleware/auth.js";
 
 const authRouter = express.Router();
 
 const getToken = (req) => req.headers.authorization?.replace(/^Bearer\s+/i, "");
 
-const requireAdmin = async (req, res, next) => {
-    const user = await authApp.getUserByToken(getToken(req));
-    if (!user || user.role !== "admin") {
-        res.status(403).json({ error: "Admin access required" });
-        return;
-    }
-    req.user = user;
-    next();
-};
+const requireAdmin = requireRole("admin");
 
 authRouter.post("/register", async (req, res) => {
     try {

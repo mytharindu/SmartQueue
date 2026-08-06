@@ -52,12 +52,33 @@ function App() {
             <Route path="/my-tokens" element={<MyTokensPage />} />
             <Route path="/live" element={<LivePage />} />
             <Route path="/officer" element={<RequireAuth><OfficerPage /></RequireAuth>} />
-            <Route path="/admin" element={<RequireAuth><AdminPage /></RequireAuth>} />
+            <Route
+              path="/admin"
+              element={
+                <RequireAuth roles={["supervisor", "manager", "admin"]}>
+                  <AdminPage />
+                </RequireAuth>
+              }
+            />
             <Route path="/counters" element={<RequireAuth><CountersPage /></RequireAuth>} />
-            <Route path="/services" element={<RequireAuth><ServicesPage /></RequireAuth>} />
-            <Route path="/departments" element={<RequireAuth><DepartmentsPage /></RequireAuth>} />
+            <Route
+              path="/services"
+              element={
+                <RequireAuth roles={["supervisor", "manager", "admin"]}>
+                  <ServicesPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/departments"
+              element={
+                <RequireAuth roles={["supervisor", "manager", "admin"]}>
+                  <DepartmentsPage />
+                </RequireAuth>
+              }
+            />
             <Route path="/time-slots" element={<RequireAuth><TimeSlotsPage /></RequireAuth>} />
-            <Route path="/staff" element={<RequireAuth adminOnly><StaffPage /></RequireAuth>} />
+            <Route path="/staff" element={<RequireAuth roles={["admin"]}><StaffPage /></RequireAuth>} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="*" element={<NotFound />} />
