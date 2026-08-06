@@ -193,6 +193,7 @@ export default function BookPage() {
                     <Input
                         type="date"
                         value={date}
+                        min={toLocalDateOnly(new Date())}
                         onChange={(e) => selectDate(e.target.value)}
                         className="mt-2 max-w-xs"
                     />

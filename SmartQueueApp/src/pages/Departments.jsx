@@ -45,6 +45,39 @@ const EMOJI_OPTIONS = [
     "💰", "💳", "📈", "🔐", "🛡️", "📱", "💻", "⚙️",
 ];
 
+const DEFAULT_OPERATING_HOURS = {
+    monday: { open: "09:00", close: "17:00" },
+    tuesday: { open: "09:00", close: "17:00" },
+    wednesday: { open: "09:00", close: "17:00" },
+    thursday: { open: "09:00", close: "17:00" },
+    friday: { open: "09:00", close: "17:00" },
+    saturday: { open: "Closed", close: "Closed" },
+    sunday: { open: "Closed", close: "Closed" },
+};
+
+// Accepts "HH:MM" (24h) or "H:MM AM/PM" and returns "HH:MM" for a native
+// <input type="time">, or "" if closed/unset/unparseable.
+function to24hInput(str) {
+    if (!str) return "";
+    const trimmed = str.trim();
+    if (/closed/i.test(trimmed)) return "";
+    const match24 = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+    if (match24) return `${match24[1].padStart(2, "0")}:${match24[2]}`;
+    const match12 = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(trimmed);
+    if (!match12) return "";
+    let hours = parseInt(match12[1], 10);
+    const period = match12[3].toUpperCase();
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, "0")}:${match12[2]}`;
+}
+
+const weekendFieldFrom = (dayHours) => {
+    const start = to24hInput(dayHours?.open);
+    const end = to24hInput(dayHours?.close);
+    return { open: Boolean(start), start: start || "09:00", end: end || "13:00" };
+};
+
 const emptyFormData = {
     name: "",
     description: "",
@@ -56,6 +89,11 @@ const emptyFormData = {
     isActive: true,
     breakStart: "12:00",
     breakEnd: "13:00",
+    operatingHours: DEFAULT_OPERATING_HOURS,
+    weekendHours: {
+        saturday: weekendFieldFrom(DEFAULT_OPERATING_HOURS.saturday),
+        sunday: weekendFieldFrom(DEFAULT_OPERATING_HOURS.sunday),
+    },
 };
 
 export default function DepartmentsPage() {
@@ -126,6 +164,26 @@ export default function DepartmentsPage() {
         }));
     };
 
+    const toggleWeekendDay = (day) => {
+        setFormData((prev) => ({
+            ...prev,
+            weekendHours: {
+                ...prev.weekendHours,
+                [day]: { ...prev.weekendHours[day], open: !prev.weekendHours[day].open },
+            },
+        }));
+    };
+
+    const updateWeekendTime = (day, field, value) => {
+        setFormData((prev) => ({
+            ...prev,
+            weekendHours: {
+                ...prev.weekendHours,
+                [day]: { ...prev.weekendHours[day], [field]: value },
+            },
+        }));
+    };
+
     const nextDeptId = () => {
         const maxNum = departments.reduce((max, d) => {
             const match = /^DEPT-(\d{3})$/.exec(d.deptId ?? "");
@@ -147,8 +205,24 @@ export default function DepartmentsPage() {
             return;
         }
 
-        const { breakStart, breakEnd, ...rest } = formData;
-        const payload = { ...rest, breakTime: { start: breakStart, end: breakEnd } };
+        for (const day of ["saturday", "sunday"]) {
+            const w = formData.weekendHours[day];
+            if (w.open && w.end <= w.start) {
+                toast.error(`${day === "saturday" ? "Saturday" : "Sunday"} close time must be after open time`);
+                return;
+            }
+        }
+
+        const operatingHours = { ...(formData.operatingHours ?? DEFAULT_OPERATING_HOURS) };
+        for (const day of ["saturday", "sunday"]) {
+            const w = formData.weekendHours[day];
+            operatingHours[day] = w.open
+                ? { open: w.start, close: w.end }
+                : { open: "Closed", close: "Closed" };
+        }
+
+        const { breakStart, breakEnd, weekendHours, operatingHours: _oh, ...rest } = formData;
+        const payload = { ...rest, breakTime: { start: breakStart, end: breakEnd }, operatingHours };
 
         if (editingId) {
             updateMutation.mutate({ id: editingId, payload });
@@ -174,6 +248,11 @@ export default function DepartmentsPage() {
             isActive: department.isActive,
             breakStart: department.breakTime?.start ?? "12:00",
             breakEnd: department.breakTime?.end ?? "13:00",
+            operatingHours: department.operatingHours ?? DEFAULT_OPERATING_HOURS,
+            weekendHours: {
+                saturday: weekendFieldFrom(department.operatingHours?.saturday),
+                sunday: weekendFieldFrom(department.operatingHours?.sunday),
+            },
         });
         setIsModalOpen(true);
     };
@@ -454,6 +533,45 @@ export default function DepartmentsPage() {
                                     <p className="text-xs text-muted-foreground">
                                         No appointment slots will be generated during this window.
                                     </p>
+                                </div>
+
+                                {/* Weekend hours */}
+                                <div className="space-y-2 rounded-md border border-input p-3">
+                                    <Label>Weekend hours</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Off by default (weekdays only). Turn a day on to open it for booking.
+                                    </p>
+                                    {["saturday", "sunday"].map((day) => {
+                                        const w = formData.weekendHours[day];
+                                        return (
+                                            <div key={day} className="flex items-center gap-3 pt-1">
+                                                <label className="flex w-28 items-center gap-2 text-sm">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={w.open}
+                                                        onChange={() => toggleWeekendDay(day)}
+                                                        className="h-4 w-4 rounded border-input"
+                                                    />
+                                                    {day === "saturday" ? "Saturday" : "Sunday"}
+                                                </label>
+                                                <Input
+                                                    type="time"
+                                                    value={w.start}
+                                                    disabled={!w.open}
+                                                    onChange={(e) => updateWeekendTime(day, "start", e.target.value)}
+                                                    className="bg-input"
+                                                />
+                                                <span className="text-sm text-muted-foreground">to</span>
+                                                <Input
+                                                    type="time"
+                                                    value={w.end}
+                                                    disabled={!w.open}
+                                                    onChange={(e) => updateWeekendTime(day, "end", e.target.value)}
+                                                    className="bg-input"
+                                                />
+                                            </div>
+                                        );
+                                    })}
                                 </div>
 
                                 {/* Description */}

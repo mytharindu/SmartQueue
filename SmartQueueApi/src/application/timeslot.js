@@ -8,23 +8,28 @@ const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "frid
 // Fallback break window used when a department hasn't set its own.
 const DEFAULT_BREAK_MINUTES = { start: 12 * 60, end: 13 * 60 }; // 12:00 - 13:00
 
-const parse24h = (str) => {
-    if (!str) return null;
-    const match = /^(\d{1,2}):(\d{2})$/.exec(str.trim());
-    if (!match) return null;
-    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
-};
-
+// Accepts either 24-hour "HH:MM" (native <input type="time">) or 12-hour
+// "H:MM AM/PM" (the format the original seed data was written in).
 const parseClockTime = (str) => {
     if (!str || /closed/i.test(str)) return null;
-    const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(str.trim());
-    if (!match) return null;
-    let hours = parseInt(match[1], 10);
-    const minutes = parseInt(match[2], 10);
-    const period = match[3].toUpperCase();
-    if (period === "PM" && hours !== 12) hours += 12;
-    if (period === "AM" && hours === 12) hours = 0;
-    return hours * 60 + minutes;
+    const trimmed = str.trim();
+
+    const match24 = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+    if (match24) {
+        return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
+    }
+
+    const match12 = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(trimmed);
+    if (match12) {
+        let hours = parseInt(match12[1], 10);
+        const minutes = parseInt(match12[2], 10);
+        const period = match12[3].toUpperCase();
+        if (period === "PM" && hours !== 12) hours += 12;
+        if (period === "AM" && hours === 12) hours = 0;
+        return hours * 60 + minutes;
+    }
+
+    return null;
 };
 
 const minutesToClock = (mins) => {
@@ -71,8 +76,8 @@ export const getServiceSlots = async (serviceId, dateStr) => {
     const effectiveOpen = openMin ?? 9 * 60;
     const effectiveClose = closeMin ?? 17 * 60;
 
-    const breakStart = parse24h(department?.breakTime?.start) ?? DEFAULT_BREAK_MINUTES.start;
-    const breakEnd = parse24h(department?.breakTime?.end) ?? DEFAULT_BREAK_MINUTES.end;
+    const breakStart = parseClockTime(department?.breakTime?.start) ?? DEFAULT_BREAK_MINUTES.start;
+    const breakEnd = parseClockTime(department?.breakTime?.end) ?? DEFAULT_BREAK_MINUTES.end;
 
     const slotTimes = [];
     if (!departmentClosed && capacityPerSlot > 0) {
