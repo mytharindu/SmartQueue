@@ -53,19 +53,27 @@ export default function BookPage() {
         enabled: !!service,
     });
 
-    useEffect(() => {
-        setSlot(null);
-    }, [service?._id, date]);
+    const invalidPreselection = Boolean(preselectedServiceId && services.length > 0 && !service);
+    const effectiveStep = invalidPreselection ? 1 : step;
 
     useEffect(() => {
-        if (preselectedServiceId && services.length > 0 && !service) {
+        if (invalidPreselection) {
             toast.error("Service not found", {
                 description: "That service is no longer available, please pick another.",
             });
-            setServiceId(null);
-            setStep(1);
         }
-    }, [preselectedServiceId, services, service]);
+    }, [invalidPreselection]);
+
+    const selectService = (id) => {
+        setServiceId(id);
+        setStep(2);
+        setSlot(null);
+    };
+
+    const selectDate = (value) => {
+        setDate(value);
+        setSlot(null);
+    };
 
     const reservation = useMutation({
         mutationFn: reserveToken,
@@ -121,8 +129,8 @@ export default function BookPage() {
             <div className="mb-8 flex items-center gap-2 overflow-x-auto pb-2">
                 {STEPS.map((label, i) => {
                     const n = i + 1;
-                    const active = step === n;
-                    const done = step > n;
+                    const active = effectiveStep === n;
+                    const done = effectiveStep > n;
                     return (
                         <div key={label} className="flex shrink-0 items-center gap-2">
                             <div
@@ -147,21 +155,17 @@ export default function BookPage() {
             </div>
 
             {/* Step 1: Service */}
-            {step === 1 && (
+            {effectiveStep === 1 && (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {services.map((s) => (
                         <Card
                             key={s._id}
                             role="button"
                             tabIndex={0}
-                            onClick={() => {
-                                setServiceId(s._id);
-                                setStep(2);
-                            }}
+                            onClick={() => selectService(s._id)}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
-                                    setServiceId(s._id);
-                                    setStep(2);
+                                    selectService(s._id);
                                 }
                             }}
                             className={cn(
@@ -183,13 +187,13 @@ export default function BookPage() {
                 </div>
             )}
             {/* Step 2: Date & time */}
-            {step === 2 && service && (
+            {effectiveStep === 2 && service && (
                 <Card className="bg-card p-6 shadow-card">
                     <Label className="text-base">Choose date</Label>
                     <Input
                         type="date"
                         value={date}
-                        onChange={(e) => setDate(e.target.value)}
+                        onChange={(e) => selectDate(e.target.value)}
                         className="mt-2 max-w-xs"
                     />
                     <div className="mt-6">
@@ -243,7 +247,7 @@ export default function BookPage() {
             )}
 
             {/* Step 3: Details */}
-            {step === 3 && service && (
+            {effectiveStep === 3 && service && (
                 <Card className="space-y-5 bg-card p-6 shadow-card">
                     <div>
                         <Label>Full name (as in NIC)</Label>
@@ -314,7 +318,7 @@ export default function BookPage() {
             )}
 
             {/* Step 4: Confirmation */}
-            {step === 4 && service && token && (
+            {effectiveStep === 4 && service && token && (
                 <Card className="bg-gradient-card border-primary/30 p-8 text-center shadow-glow">
                     <div className="mx-auto flex h-16 w-16 animate-pulse-ring items-center justify-center rounded-full bg-success/15 text-success">
                         <Check className="h-8 w-8" />
