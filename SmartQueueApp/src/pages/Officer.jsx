@@ -242,7 +242,7 @@ export default function OfficerPage() {
                                             title={serving.priorityReason}
                                         >
                                             <Star className="mr-1 h-3 w-3" />
-                                            Priority: {serving.priorityReason}
+                                            Priority
                                         </Badge>
                                     )}
                                     {serving.priority && serving.priorityStatus === "pending" && (
@@ -352,7 +352,11 @@ export default function OfficerPage() {
                             </TableHeader>
                             <TableBody>
                                 {pendingQueue.map((q, i) => (
-                                    <TableRow key={q._id} className={i === 0 ? "bg-primary/5" : ""}>
+                                    <TableRow
+                                        key={q._id}
+                                        className={i === 0 ? "bg-primary/5" : ""}
+                                        title={q.priority ? q.priorityReason : undefined}
+                                    >
                                         <TableCell className="font-semibold text-muted-foreground">
                                             {i + 1}
                                         </TableCell>
@@ -367,9 +371,8 @@ export default function OfficerPage() {
                                             {q.priority ? (
                                                 <div className="flex flex-col items-start gap-1">
                                                     <span
-                                                        title={q.priorityReason}
                                                         className={cn(
-                                                            "inline-flex max-w-[180px] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
                                                             q.priorityStatus === "accepted"
                                                                 ? "bg-success/15 text-success"
                                                                 : q.priorityStatus === "rejected"
@@ -378,7 +381,7 @@ export default function OfficerPage() {
                                                         )}
                                                     >
                                                         <Star className="h-3 w-3 shrink-0" />
-                                                        {q.priorityReason}
+                                                        Priority
                                                     </span>
                                                     {q.priorityStatus === "pending" && (
                                                         <div className="flex gap-1">
