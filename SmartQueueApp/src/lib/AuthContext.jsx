@@ -26,14 +26,14 @@ export function AuthProvider({ children }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = async (username, password) => {
-    const { token, user: loggedInUser } = await loginAccount(username, password);
+  const login = async (email, password) => {
+    const { token, user: loggedInUser } = await loginAccount(email, password);
     localStorage.setItem("authToken", token);
     setUser(loggedInUser);
     return loggedInUser;
   };
 
-  const register = (username, password) => registerAccount(username, password);
+  const register = (payload) => registerAccount(payload);
 
   const logout = async () => {
     try {

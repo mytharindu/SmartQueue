@@ -39,7 +39,7 @@ export function Header({ onToggleSidebar }) {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">
             <UserCircle2 className="h-4 w-4 text-primary" />
-            <span className="text-xs font-medium">{user.username}</span>
+            <span className="text-xs font-medium">{user.firstName} {user.lastName}</span>
             <Badge variant="secondary" className="text-[10px] capitalize">
               {user.role.replace("-", " ")}
             </Badge>

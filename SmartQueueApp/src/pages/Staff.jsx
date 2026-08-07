@@ -43,7 +43,8 @@ export default function StaffPage() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Username</TableHead>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Email</TableHead>
                                 <TableHead>Role</TableHead>
                                 <TableHead>Status</TableHead>
                             </TableRow>
@@ -52,11 +53,12 @@ export default function StaffPage() {
                             {users.map((u) => (
                                 <TableRow key={u.id}>
                                     <TableCell className="font-medium">
-                                        {u.username}
+                                        {u.firstName} {u.lastName}
                                         {u.id === currentUser?.id && (
                                             <Badge variant="secondary" className="ml-2 text-[10px]">You</Badge>
                                         )}
                                     </TableCell>
+                                    <TableCell className="text-muted-foreground">{u.email}</TableCell>
                                     <TableCell>
                                         <select
                                             value={u.role}

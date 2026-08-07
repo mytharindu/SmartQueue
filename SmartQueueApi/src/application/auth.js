@@ -3,28 +3,33 @@ import crypto from 'crypto';
 import User from '../infrastructure/entities/User.js';
 
 const ROLES = ['counter-staff', 'supervisor', 'manager', 'admin'];
+const EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 const publicUser = (user) => ({
     id: user._id,
-    username: user.username,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phone: user.phone,
     role: user.role,
     isActive: user.isActive,
 });
 
-export const register = async ({ username, password }) => {
-    if (!username || !password) {
-        throw new Error('Username and password are required');
+export const register = async ({ firstName, lastName, email, phone, password }) => {
+    if (!firstName || !lastName || !email || !password) {
+        throw new Error('First name, last name, email and password are required');
     }
-    if (username.trim().length < 3) {
-        throw new Error('Username must be at least 3 characters');
+    if (!EMAIL_PATTERN.test(email.trim())) {
+        throw new Error('Please enter a valid email address');
     }
     if (password.length < 4) {
         throw new Error('Password must be at least 4 characters');
     }
 
-    const existing = await User.findOne({ username: username.trim().toLowerCase() });
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await User.findOne({ email: normalizedEmail });
     if (existing) {
-        throw new Error('That username is already taken');
+        throw new Error('An account with that email already exists');
     }
 
     // The very first account created becomes admin so there's always a way
@@ -33,7 +38,10 @@ export const register = async ({ username, password }) => {
 
     const hashed = await bcrypt.hash(password, 10);
     const user = new User({
-        username: username.trim().toLowerCase(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: normalizedEmail,
+        phone: phone?.trim(),
         password: hashed,
         role: isFirstUser ? 'admin' : 'counter-staff',
     });
@@ -41,17 +49,17 @@ export const register = async ({ username, password }) => {
     return publicUser(user);
 };
 
-export const login = async ({ username, password }) => {
-    if (!username || !password) {
-        throw new Error('Username and password are required');
+export const login = async ({ email, password }) => {
+    if (!email || !password) {
+        throw new Error('Email and password are required');
     }
-    const user = await User.findOne({ username: username.trim().toLowerCase() });
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
     if (!user || !user.isActive) {
-        throw new Error('Invalid username or password');
+        throw new Error('Invalid email or password');
     }
     const matches = await bcrypt.compare(password, user.password);
     if (!matches) {
-        throw new Error('Invalid username or password');
+        throw new Error('Invalid email or password');
     }
 
     const token = crypto.randomBytes(32).toString('hex');

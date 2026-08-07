@@ -17,10 +17,10 @@ async function request(path, options = {}) {
 }
 
 // Auth
-export const registerAccount = (username, password) =>
-  request("/auth/register", { method: "POST", body: JSON.stringify({ username, password }) });
-export const loginAccount = (username, password) =>
-  request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
+export const registerAccount = (payload) =>
+  request("/auth/register", { method: "POST", body: JSON.stringify(payload) });
+export const loginAccount = (email, password) =>
+  request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 export const logoutAccount = () => request("/auth/logout", { method: "POST" });
 export const getCurrentUser = () => request("/auth/me");
 export const getAllUsers = () => request("/auth/users");
