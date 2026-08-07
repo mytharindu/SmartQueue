@@ -147,13 +147,18 @@ export default function AdminPage() {
     });
 
     const serviceStats = services.map((s) => {
-        const svcTokens = tokens.filter((t) => t.service?.serviceId === s._id);
-        const completed = svcTokens.filter((t) => t.status === "completed");
-        const pending = svcTokens.filter((t) => t.status === "pending").length;
+        const svcTokensLast7 = tokens.filter(
+            (t) => t.service?.serviceId === s._id && new Date(t.createdAt) >= sevenDaysAgo
+        );
+        const completed = svcTokensLast7.filter((t) => t.status === "completed");
+        // "Busy" reflects the live queue right now, not history, so it isn't scoped to 7 days.
+        const pending = tokens.filter(
+            (t) => t.service?.serviceId === s._id && t.status === "pending"
+        ).length;
         const avgWait = completed.length
             ? Math.round(completed.reduce((sum, t) => sum + (t.timing?.actualWaitTime || 0), 0) / completed.length)
             : 0;
-        return { ...s, issued: svcTokens.length, avgWait, pending };
+        return { ...s, issued: svcTokensLast7.length, avgWait, pending };
     });
 
     return (
@@ -271,7 +276,7 @@ export default function AdminPage() {
                         <CardHeader>
                             <CardTitle className="text-base">Service breakdown</CardTitle>
                             <CardDescription>
-                                Tokens issued and average wait per service
+                                Tokens issued and average wait per service · last 7 days
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
