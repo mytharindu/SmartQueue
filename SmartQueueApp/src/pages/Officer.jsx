@@ -31,7 +31,14 @@ import {
     TableRow,
 } from "@/components/ui/Table";
 
-import { getAllCounters, getAllTokens, callToken, completeToken, cancelToken } from "@/lib/api";
+import {
+    getAllCounters,
+    getAllTokens,
+    callToken,
+    completeToken,
+    cancelToken,
+    reviewTokenPriority,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 function isToday(dateString) {
@@ -103,6 +110,19 @@ export default function OfficerPage() {
         onError: (error) => toast.error(error.message),
     });
 
+    const priorityMutation = useMutation({
+        mutationFn: ({ id, status }) => reviewTokenPriority(id, status),
+        onSuccess: (token, variables) => {
+            invalidate();
+            toast.success(
+                variables.status === "accepted"
+                    ? `Priority accepted for ${token.tokenNumber}`
+                    : `Priority rejected for ${token.tokenNumber}`,
+            );
+        },
+        onError: (error) => toast.error(error.message),
+    });
+
     const serving = tokens.find(
         (t) => t.counter?.counterId === counter?._id && ["called", "serving"].includes(t.status)
     );
@@ -115,7 +135,9 @@ export default function OfficerPage() {
                 isToday(t.bookedDate)
         )
         .sort((a, b) => {
-            if (a.priority !== b.priority) return a.priority ? -1 : 1;
+            const aPriority = a.priority && a.priorityStatus !== "rejected";
+            const bPriority = b.priority && b.priorityStatus !== "rejected";
+            if (aPriority !== bPriority) return aPriority ? -1 : 1;
             return new Date(a.bookedDate) - new Date(b.bookedDate);
         });
 
@@ -215,10 +237,38 @@ export default function OfficerPage() {
                                         <span className="font-medium">{serving.citizen?.name}</span>
                                     </div>
                                     {serving.priority && (
-                                        <Badge className="border-0 bg-warning text-warning-foreground">
+                                        <Badge
+                                            className="border-0 bg-warning text-warning-foreground"
+                                            title={serving.priorityReason}
+                                        >
                                             <Star className="mr-1 h-3 w-3" />
-                                            Priority
+                                            Priority: {serving.priorityReason}
                                         </Badge>
+                                    )}
+                                    {serving.priority && serving.priorityStatus === "pending" && (
+                                        <div className="flex gap-1">
+                                            <Button
+                                                size="sm"
+                                                className="h-7 bg-card px-2 text-xs text-success hover:bg-card/90"
+                                                onClick={() =>
+                                                    priorityMutation.mutate({ id: serving._id, status: "accepted" })
+                                                }
+                                                disabled={priorityMutation.isPending}
+                                            >
+                                                Accept
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 px-2 text-xs text-primary-foreground hover:bg-white/10"
+                                                onClick={() =>
+                                                    priorityMutation.mutate({ id: serving._id, status: "rejected" })
+                                                }
+                                                disabled={priorityMutation.isPending}
+                                            >
+                                                Reject
+                                            </Button>
+                                        </div>
                                     )}
                                 </div>
                                 <div className="relative mt-6 flex flex-wrap gap-2">
@@ -296,6 +346,7 @@ export default function OfficerPage() {
                                     <TableHead className="w-12">#</TableHead>
                                     <TableHead>Token</TableHead>
                                     <TableHead>Citizen</TableHead>
+                                    <TableHead>Priority</TableHead>
                                     <TableHead className="text-right">Booked</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -308,13 +359,57 @@ export default function OfficerPage() {
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <span className="font-mono font-bold">{q.tokenNumber}</span>
-                                                {q.priority && (
-                                                    <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-                                                )}
                                                 {i === 0 && <Badge>Next</Badge>}
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">{q.citizen?.name}</TableCell>
+                                        <TableCell>
+                                            {q.priority ? (
+                                                <div className="flex flex-col items-start gap-1">
+                                                    <span
+                                                        title={q.priorityReason}
+                                                        className={cn(
+                                                            "inline-flex max-w-[180px] items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                                            q.priorityStatus === "accepted"
+                                                                ? "bg-success/15 text-success"
+                                                                : q.priorityStatus === "rejected"
+                                                                    ? "bg-muted text-muted-foreground line-through"
+                                                                    : "bg-warning/15 text-warning",
+                                                        )}
+                                                    >
+                                                        <Star className="h-3 w-3 shrink-0" />
+                                                        {q.priorityReason}
+                                                    </span>
+                                                    {q.priorityStatus === "pending" && (
+                                                        <div className="flex gap-1">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    priorityMutation.mutate({ id: q._id, status: "accepted" })
+                                                                }
+                                                                disabled={priorityMutation.isPending}
+                                                                className="text-[11px] font-medium text-success hover:underline disabled:opacity-50"
+                                                            >
+                                                                Accept
+                                                            </button>
+                                                            <span className="text-[11px] text-muted-foreground">·</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    priorityMutation.mutate({ id: q._id, status: "rejected" })
+                                                                }
+                                                                disabled={priorityMutation.isPending}
+                                                                className="text-[11px] font-medium text-destructive hover:underline disabled:opacity-50"
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">—</span>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="text-right font-mono text-xs">
                                             {new Date(q.bookedDate).toLocaleTimeString([], {
                                                 hour: "2-digit",

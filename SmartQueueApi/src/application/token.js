@@ -67,9 +67,12 @@ export const getTokensByStatus = async (status) => {
 
 export const reserveToken = async (tokenData) => {
     try {
-        const { serviceId, serviceName, citizenName, nic, phone, bookedDate, priority } = tokenData;
+        const { serviceId, serviceName, citizenName, nic, phone, bookedDate, priority, priorityReason } = tokenData;
         if (!citizenName || !serviceId || !serviceName) {
             throw new Error("Citizen name, service ID and service name are required to reserve a token");
+        }
+        if (priority && !priorityReason?.trim()) {
+            throw new Error("Please provide a reason for the priority request");
         }
 
         let tokenNumber;
@@ -113,6 +116,8 @@ export const reserveToken = async (tokenData) => {
             citizen: { name: citizenName, nic, phone },
             bookedDate: bookedAt,
             priority: !!priority,
+            priorityReason: priority ? priorityReason.trim() : undefined,
+            priorityStatus: priority ? "pending" : "none",
             timing: { estimatedWaitTime },
             ...(assignedCounter && {
                 counter: { counterId: assignedCounter._id, counterName: assignedCounter.counterName },
@@ -226,6 +231,26 @@ export const cancelToken = async (id) => {
         return token;
     } catch (error) {
         throw new Error("Failed to cancel token: " + error.message);
+    }
+};
+
+export const reviewPriority = async (id, status) => {
+    try {
+        if (!["accepted", "rejected"].includes(status)) {
+            throw new Error("Status must be 'accepted' or 'rejected'");
+        }
+        const token = await Token.findById(id);
+        if (!token) {
+            throw new Error("Token not found");
+        }
+        if (!token.priority) {
+            throw new Error("This token did not request priority");
+        }
+        token.priorityStatus = status;
+        await token.save();
+        return token;
+    } catch (error) {
+        throw new Error("Failed to review priority request: " + error.message);
     }
 };
 

@@ -69,6 +69,8 @@ export const callToken = (id, counterNumber) =>
   });
 export const completeToken = (id) =>
   request(`/tokens/${id}/complete`, { method: "PUT" });
+export const reviewTokenPriority = (id, status) =>
+  request(`/tokens/${id}/priority`, { method: "PUT", body: JSON.stringify({ status }) });
 
 // Time slots
 export const getServiceSlots = (serviceId, date) =>

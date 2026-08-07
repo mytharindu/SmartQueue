@@ -77,6 +77,17 @@ tokenRouter
     });
 
 tokenRouter
+    .route("/:id/priority")
+    .put(async (req, res) => {
+        try {
+            const updatedToken = await tokenApp.reviewPriority(req.params.id, req.body.status);
+            res.json(updatedToken);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    });
+
+tokenRouter
     .route("/status/:status")
     .get(async (req, res) => {
         try {

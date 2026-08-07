@@ -93,9 +93,19 @@ export default function MyTokensPage() {
                                         ) : (
                                             <Badge variant="secondary">Pending</Badge>
                                         )}
-                                        {token.priority && (
+                                        {token.priority && token.priorityStatus === "accepted" && (
+                                            <Badge className="border border-success/30 bg-success/15 text-success">
+                                                Priority confirmed
+                                            </Badge>
+                                        )}
+                                        {token.priority && token.priorityStatus === "pending" && (
                                             <Badge className="border border-warning/40 bg-warning/20 text-warning-foreground">
-                                                Priority
+                                                Priority under review
+                                            </Badge>
+                                        )}
+                                        {token.priority && token.priorityStatus === "rejected" && (
+                                            <Badge variant="secondary" title={token.priorityReason}>
+                                                Priority not approved
                                             </Badge>
                                         )}
                                     </div>

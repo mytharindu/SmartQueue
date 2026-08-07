@@ -61,6 +61,17 @@ const tokenSchema = new mongoose.Schema(
             default: false,
             index: true,
         },
+        priorityReason: {
+            type: String,
+            trim: true,
+            maxlength: [200, 'Priority reason cannot exceed 200 characters'],
+        },
+        priorityStatus: {
+            type: String,
+            enum: ['none', 'pending', 'accepted', 'rejected'],
+            default: 'none',
+            index: true,
+        },
         bookedDate: {
             type: Date,
             required: [true, 'Booked date is required'],

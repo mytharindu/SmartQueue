@@ -35,6 +35,7 @@ export default function BookPage() {
     );
     const [slot, setSlot] = useState(null);
     const [priority, setPriority] = useState(false);
+    const [priorityReason, setPriorityReason] = useState("");
     const [token, setToken] = useState(null);
     const [citizenName, setCitizenName] = useState("A. Perera");
     const [nic, setNic] = useState("200145600789");
@@ -90,6 +91,10 @@ export default function BookPage() {
     });
 
     const confirm = () => {
+        if (priority && !priorityReason.trim()) {
+            toast.error("Please add a reason for the priority request");
+            return;
+        }
         reservation.mutate({
             serviceId: service._id,
             serviceName: service.name,
@@ -98,6 +103,7 @@ export default function BookPage() {
             phone,
             bookedDate: slot ? `${date}T${slot}:00` : date,
             priority,
+            priorityReason: priority ? priorityReason.trim() : undefined,
         });
     };
 
@@ -106,6 +112,8 @@ export default function BookPage() {
         setServiceId(null);
         setSlot(null);
         setToken(null);
+        setPriority(false);
+        setPriorityReason("");
     };
 
     useEffect(() => {
@@ -290,23 +298,43 @@ export default function BookPage() {
                             ))}
                         </ul>
                     </div>
-                    <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4 hover:bg-muted/40">
-                        <Checkbox
-                            checked={priority}
-                            onCheckedChange={(v) => setPriority(v === true)}
-                            className="mt-0.5"
-                        />
-                        <div>
-                            <p className="flex items-center gap-2 text-sm font-medium">
-                                <ShieldAlert className="h-4 w-4 text-warning" />
-                                Priority booking
-                            </p>
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                                For elderly (60+), pregnant women, persons with disabilities, or urgent medical
-                                cases.
-                            </p>
-                        </div>
-                    </label>
+                    <div className="rounded-lg border border-border p-4 hover:bg-muted/40">
+                        <label className="flex cursor-pointer items-start gap-3">
+                            <Checkbox
+                                checked={priority}
+                                onCheckedChange={(v) => setPriority(v === true)}
+                                className="mt-0.5"
+                            />
+                            <div>
+                                <p className="flex items-center gap-2 text-sm font-medium">
+                                    <ShieldAlert className="h-4 w-4 text-warning" />
+                                    Priority booking
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                    For elderly (60+), pregnant women, persons with disabilities, or urgent medical
+                                    cases.
+                                </p>
+                            </div>
+                        </label>
+                        {priority && (
+                            <div className="mt-3 pl-7">
+                                <Label htmlFor="priorityReason" className="text-xs">
+                                    Reason for priority *
+                                </Label>
+                                <textarea
+                                    id="priorityReason"
+                                    value={priorityReason}
+                                    onChange={(e) => setPriorityReason(e.target.value)}
+                                    placeholder="e.g., 68 years old, difficulty standing for long periods"
+                                    maxLength={200}
+                                    className="mt-1.5 h-16 w-full rounded-md border border-input bg-input px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                                <p className="mt-1 text-[11px] text-muted-foreground">
+                                    The officer will review this before your token is treated as priority.
+                                </p>
+                            </div>
+                        )}
+                    </div>
                     <div className="flex justify-between">
                         <Button variant="ghost" onClick={() => setStep(2)}>
                             Back
